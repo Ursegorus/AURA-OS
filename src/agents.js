@@ -16,6 +16,7 @@ const BUILTIN_AGENTS = [
     vendor: 'Anthropic',
     command: 'claude',
     args: ['-p', '{prompt}'],
+    needsShell: false,
     detectArgs: ['--version'],
     skills: ['coding', 'architecture', 'refactoring', 'writing', 'planning', 'analysis'],
     roles: ['coordinator', 'coder', 'reviewer', 'writer'],
@@ -27,7 +28,9 @@ const BUILTIN_AGENTS = [
     name: 'Codex CLI',
     vendor: 'OpenAI',
     command: 'codex',
-    args: ['exec', '--skip-git-repo-check', '{prompt}'],
+    args: ['exec', '--skip-git-repo-check', '--'],
+    stdinPrompt: true,
+    needsShell: false,
     detectArgs: ['--version'],
     skills: ['coding', 'code-review', 'debugging', 'testing'],
     roles: ['coder', 'reviewer'],
@@ -40,6 +43,7 @@ const BUILTIN_AGENTS = [
     vendor: 'Google',
     command: 'gemini',
     args: ['-p', '{prompt}'],
+    needsShell: true,
     detectArgs: ['--version'],
     skills: ['coding', 'research', 'long-context', 'analysis'],
     roles: ['coder', 'researcher', 'reviewer'],
@@ -51,7 +55,8 @@ const BUILTIN_AGENTS = [
     name: 'Hermes Agent',
     vendor: 'Nous Research',
     command: 'hermes',
-    args: ['{prompt}'],
+    args: ['-z', '{prompt}', '--cli'],
+    needsShell: false,
     detectArgs: ['--version'],
     skills: ['research', 'reasoning', 'tool-use'],
     roles: ['researcher', 'coder'],
@@ -64,6 +69,7 @@ const BUILTIN_AGENTS = [
     vendor: 'Local',
     command: 'ollama',
     args: ['run', '{model}', '{prompt}'],
+    needsShell: false,
     model: 'qwen2.5-coder',
     detectArgs: ['--version'],
     skills: ['coding', 'offline', 'privacy'],
@@ -106,6 +112,7 @@ class AgentManager {
       vendor: def.vendor || 'Custom',
       command: def.command,
       args: Array.isArray(def.args) ? def.args : String(def.args || '{prompt}').split(' '),
+      needsShell: def.needsShell !== undefined ? def.needsShell : IS_WIN,
       detectArgs: def.detectArgs || ['--version'],
       skills: def.skills || [],
       roles: def.roles || ['coder'],
@@ -165,9 +172,15 @@ class AgentManager {
     const agent = this.getAgent(agentId);
     if (!agent) return Promise.resolve({ ok: false, output: 'Unknown agent: ' + agentId, code: -1 });
 
-    let args = agent.args.map(a =>
-      a.replace('{prompt}', prompt).replace('{model}', model || agent.model || '')
-    ).filter(a => a.length > 0);
+    let args = agent.args.map(a => {
+      let s = a;
+      if (agent.stdinPrompt) {
+        s = s.replace('{prompt}', '');
+      } else {
+        s = s.replace('{prompt}', prompt);
+      }
+      return s.replace('{model}', model || agent.model || '');
+    }).filter(a => a.length > 0);
 
     // Smart model routing: inject the model flag when a model is chosen and the
     // agent declares how to set it (and {model} isn't already part of its args).
@@ -180,7 +193,7 @@ class AgentManager {
       let settled = false;
       const child = spawn(agent.command, args, {
         cwd: cwd || os.homedir(),
-        shell: IS_WIN, // resolve .cmd/.bat shims on Windows
+        shell: agent.needsShell === undefined ? IS_WIN : agent.needsShell,
         windowsHide: true,
         env: { ...process.env, NO_COLOR: '1', TERM: 'dumb' }
       });
@@ -197,6 +210,10 @@ class AgentManager {
       };
       child.stdout.on('data', handle);
       child.stderr.on('data', handle);
+      // Передаём промпт через stdin если агент так настроен
+      if (agent.stdinPrompt && prompt) {
+        child.stdin.write(prompt);
+      }
       child.stdin.end();
 
       const done = (code) => {

@@ -53,6 +53,7 @@ function createWindow() {
     height: 880,
     minWidth: 1024,
     minHeight: 640,
+    frame: false,
     backgroundColor: '#0b0f17',
     autoHideMenuBar: true,
     title: 'AURA OS',
@@ -140,3 +141,15 @@ ipcMain.handle('memory:openVault', () => {
   if (memory.isConfigured()) shell.openPath(memory.vaultPath());
 });
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
+
+// ---------- Window controls ----------
+ipcMain.handle('window:minimize', () => { if (win && !win.isDestroyed()) win.minimize(); });
+ipcMain.handle('window:maximize', () => {
+  if (win && !win.isDestroyed()) {
+    if (win.isMaximized()) win.unmaximize(); else win.maximize();
+  }
+});
+ipcMain.handle('window:close', () => { if (win && !win.isDestroyed()) win.close(); });
+ipcMain.handle('window:isMaximized', () => win && !win.isDestroyed() && win.isMaximized());
+win.on('maximize', () => win.webContents.send('window:maximized'));
+win.on('unmaximize', () => win.webContents.send('window:unmaximized'));

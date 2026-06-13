@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('aura', {
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onMaximized: (cb) => ipcRenderer.on('window:maximized', () => cb(true)),
+    onUnmaximized: (cb) => ipcRenderer.on('window:unmaximized', () => cb(false))
+  },
   agents: {
     list: () => ipcRenderer.invoke('agents:list'),
     add: (def) => ipcRenderer.invoke('agents:add', def),

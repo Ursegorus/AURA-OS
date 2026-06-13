@@ -8,6 +8,21 @@
 </head>
 <body>
   <div id="app">
+    <!-- Title Bar -->
+    <div class="titlebar">
+      <div class="titlebar-drag">
+        <div class="titlebar-brand">
+          <div class="titlebar-logo">A</div>
+          <span>AURA OS</span>
+        </div>
+      </div>
+      <div class="titlebar-controls">
+        <button class="tb-btn" id="tb-minimize" title="Свернуть">─</button>
+        <button class="tb-btn" id="tb-maximize" title="Развернуть">□</button>
+        <button class="tb-btn tb-close" id="tb-close" title="Закрыть">✕</button>
+      </div>
+    </div>
+    <div class="app-body">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
@@ -117,7 +132,8 @@
         </div>
       </section>
     </main>
-  </div>
+      </div>
+    </div>
 
   <!-- Add agent modal -->
   <div id="modal-agent" class="modal hidden">

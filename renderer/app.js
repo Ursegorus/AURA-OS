@@ -17,6 +17,26 @@ function applyI18n() {
   $('#btn-voice').title = t('voice_hint');
 }
 
+/* ---------- window controls ---------- */
+$('#tb-minimize').addEventListener('click', () => window.aura.window.minimize());
+$('#tb-maximize').addEventListener('click', () => window.aura.window.maximize());
+$('#tb-close').addEventListener('click', () => window.aura.window.close());
+window.aura.window.onMaximized(() => {
+  $('#tb-maximize').textContent = '⊡';
+  $('#tb-maximize').title = 'Восстановить';
+});
+window.aura.window.onUnmaximized(() => {
+  $('#tb-maximize').textContent = '□';
+  $('#tb-maximize').title = 'Развернуть';
+});
+// Sync initial state
+window.aura.window.isMaximized().then(m => {
+  if (m) {
+    $('#tb-maximize').textContent = '⊡';
+    $('#tb-maximize').title = 'Восстановить';
+  }
+});
+
 /* ---------- navigation ---------- */
 $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => {
   $$('.nav-btn').forEach(b => b.classList.remove('active'));
