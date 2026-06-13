@@ -230,3 +230,6 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 }
 .tg-status.ok { color: var(--ok); }
 .tg-status.err { color: var(--err); }
+
+/* utility */
+.hidden { display: none !important; }

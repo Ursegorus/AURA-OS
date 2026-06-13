@@ -218,7 +218,14 @@ async function loadSettings() {
   $('#set-parallel').value = state.settings.maxParallel;
   $('#set-fix').value = state.settings.maxFixRounds;
   $('#set-review').checked = !!state.settings.reviewEnabled;
-  $('#set-routing').checked = !!state.settings.smartRouting;
+  // Pro-версия: умная маршрутизация моделей
+  const routingSection = $('#set-routing-section');
+  if (state.settings.proAvailable) {
+    routingSection.classList.remove('hidden');
+    $('#pro-routing').checked = !!state.settings.proEnabled;
+  } else {
+    routingSection.classList.add('hidden');
+  }
   $('#set-tg-enabled').checked = !!state.settings.telegramEnabled;
   $('#set-tg-token').value = state.settings.telegramToken || '';
   $('#set-tg-allowed').value = state.settings.telegramAllowed || '';
@@ -259,7 +266,7 @@ $('#btn-save-settings').addEventListener('click', async () => {
     maxParallel: parseInt($('#set-parallel').value, 10) || 3,
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,
     reviewEnabled: $('#set-review').checked,
-    smartRouting: $('#set-routing').checked,
+    proEnabled: state.settings.proAvailable ? $('#pro-routing').checked : false,
     telegramEnabled: $('#set-tg-enabled').checked,
     telegramToken: $('#set-tg-token').value.trim(),
     telegramAllowed: $('#set-tg-allowed').value.trim(),

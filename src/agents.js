@@ -19,9 +19,6 @@ const BUILTIN_AGENTS = [
     detectArgs: ['--version'],
     skills: ['coding', 'architecture', 'refactoring', 'writing', 'planning', 'analysis'],
     roles: ['coordinator', 'coder', 'reviewer', 'writer'],
-    // Smart model routing: CLI flag + model alias per complexity tier.
-    modelFlag: '--model',
-    models: { trivial: 'haiku', standard: 'sonnet', complex: 'opus' },
     color: '#d97757',
     builtin: true
   },
@@ -77,8 +74,9 @@ const BUILTIN_AGENTS = [
 ];
 
 class AgentManager {
-  constructor(store) {
+  constructor(store, pro) {
     this.store = store; // settings store with .get/.set
+    this.pro = pro || null; // Pro-модуль (опционально)
     this.running = new Map(); // runId -> child process
   }
 
@@ -87,7 +85,12 @@ class AgentManager {
     const overrides = this.store.get('agentOverrides', {});
     const custom = this.store.get('customAgents', []);
     const merged = BUILTIN_AGENTS.map(a => ({ ...a, ...(overrides[a.id] || {}) }));
-    return merged.concat(custom.map(c => ({ ...c, builtin: false })));
+    const list = merged.concat(custom.map(c => ({ ...c, builtin: false })));
+    // Pro-версия: дополняет агентов профилями (modelFlag, models)
+    if (this.pro) {
+      list.forEach(a => this.pro.patchAgentDef(a));
+    }
+    return list;
   }
 
   getAgent(id) {

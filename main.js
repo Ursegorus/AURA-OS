@@ -10,6 +10,11 @@ const { Memory } = require('./src/memory');
 const { Orchestrator } = require('./src/orchestrator');
 const { TelegramTerminal } = require('./src/telegram');
 
+// ---------- Pro-версия (приватный модуль) ----------
+let pro = null;
+try { pro = require('aura-pro'); } catch (_) { /* Free version — Pro не установлен */ }
+if (pro) console.log('[AURA] Pro-модуль загружен (Smart Model Routing)');
+
 // ---------- tiny JSON settings store ----------
 class Store {
   constructor() {
@@ -26,7 +31,7 @@ class Store {
 
 let win = null;
 const store = new Store();
-const agents = new AgentManager(store);
+const agents = new AgentManager(store, pro);
 const memory = new Memory(store);
 
 // Fan out orchestrator events to both the UI and the Telegram terminal.
@@ -34,7 +39,7 @@ function dispatchEvent(event) {
   if (win && !win.isDestroyed()) win.webContents.send('aura-event', event);
   if (telegram) telegram.onAuraEvent(event);
 }
-const orchestrator = new Orchestrator(agents, memory, store, dispatchEvent);
+const orchestrator = new Orchestrator(agents, memory, store, dispatchEvent, pro);
 
 const telegram = new TelegramTerminal({
   store, orchestrator, agents,
@@ -108,7 +113,8 @@ ipcMain.handle('settings:get', () => ({
   maxParallel: store.get('maxParallel', 3),
   maxFixRounds: store.get('maxFixRounds', 2),
   reviewEnabled: store.get('reviewEnabled', true),
-  smartRouting: store.get('smartRouting', false),
+  proEnabled: pro ? store.get('smartRouting', false) : false,
+  proAvailable: !!pro,
   lang: store.get('lang', 'ru'),
   telegramEnabled: store.get('telegramEnabled', false),
   telegramToken: store.get('telegramToken', ''),
@@ -117,6 +123,8 @@ ipcMain.handle('settings:get', () => ({
 ipcMain.handle('settings:set', (_e, patch) => {
   const tgKeys = ['telegramEnabled', 'telegramToken', 'telegramAllowed'];
   const tgChanged = tgKeys.some(k => k in patch);
+  // Pro-настройки мапятся в smartRouting в хранилище
+  if ('proEnabled' in patch) patch.smartRouting = patch.proEnabled;
   for (const [k, v] of Object.entries(patch)) store.set(k, v);
   if (tgChanged) telegram.restart().catch(() => {});
 });
