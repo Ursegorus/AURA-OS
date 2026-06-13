@@ -179,7 +179,7 @@ class TelegramTerminal {
   // ---------- commands ----------
 
   async handleCommand(chatId, text) {
-    const [cmd, ...rest] = text.split(/\s+/);
+    const cmd = text.split(/\s+/)[0];
     const arg = text.slice(cmd.length).trim();
     switch (cmd.toLowerCase()) {
       case '/start':
@@ -360,7 +360,6 @@ class TelegramTerminal {
   api(method, params, timeoutMs = 15000) {
     return new Promise((resolve, reject) => {
       const data = Buffer.from(JSON.stringify(params), 'utf8');
-      const ac = (method === 'getUpdates') ? new (require('events').EventEmitter)() : null;
       const req = https.request({
         host: API_HOST,
         path: '/bot' + this.token + '/' + method,
