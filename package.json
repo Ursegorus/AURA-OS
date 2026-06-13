@@ -6,10 +6,10 @@
   "main": "main.js",
   "author": "AURA OS",
   "license": "MIT",
-  "homepage": "https://github.com/your-org/aura-os",
+  "homepage": "https://github.com/Ursegorus/AURA-OS",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/aura-os.git"
+    "url": "https://github.com/Ursegorus/AURA-OS.git"
   },
   "scripts": {
     "start": "electron .",
