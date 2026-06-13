@@ -108,7 +108,6 @@ ipcMain.handle('settings:get', () => ({
   maxParallel: store.get('maxParallel', 3),
   maxFixRounds: store.get('maxFixRounds', 2),
   reviewEnabled: store.get('reviewEnabled', true),
-  smartRouting: store.get('smartRouting', false),
   lang: store.get('lang', 'ru'),
   telegramEnabled: store.get('telegramEnabled', false),
   telegramToken: store.get('telegramToken', ''),

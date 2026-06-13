@@ -44,7 +44,7 @@ function renderTasks() {
       <div class="subtask ${st.status}">
         <span class="dot"></span>
         <span>${esc(st.title)}</span>
-        <span class="agent-chip">${esc(st.agentName || st.agent)}${st.model ? ' · ' + esc(st.model) : ''} · ${esc(t('st_' + st.status) || st.status)}${st.dependsOn && st.dependsOn.length ? ' · ' + t('requires') + ' ' + st.dependsOn.join(',') : ''}</span>
+        <span class="agent-chip">${esc(st.agentName || st.agent)} · ${esc(t('st_' + st.status) || st.status)}${st.dependsOn && st.dependsOn.length ? ' · ' + t('requires') + ' ' + st.dependsOn.join(',') : ''}</span>
       </div>`).join('');
     const log = state.logs[task.id] || '';
     const active = task.status === 'running' || task.status === 'planning';
@@ -218,7 +218,6 @@ async function loadSettings() {
   $('#set-parallel').value = state.settings.maxParallel;
   $('#set-fix').value = state.settings.maxFixRounds;
   $('#set-review').checked = !!state.settings.reviewEnabled;
-  $('#set-routing').checked = !!state.settings.smartRouting;
   $('#set-tg-enabled').checked = !!state.settings.telegramEnabled;
   $('#set-tg-token').value = state.settings.telegramToken || '';
   $('#set-tg-allowed').value = state.settings.telegramAllowed || '';
@@ -259,7 +258,6 @@ $('#btn-save-settings').addEventListener('click', async () => {
     maxParallel: parseInt($('#set-parallel').value, 10) || 3,
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,
     reviewEnabled: $('#set-review').checked,
-    smartRouting: $('#set-routing').checked,
     telegramEnabled: $('#set-tg-enabled').checked,
     telegramToken: $('#set-tg-token').value.trim(),
     telegramAllowed: $('#set-tg-allowed').value.trim(),
