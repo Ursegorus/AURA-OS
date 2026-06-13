@@ -1,0 +1,74 @@
+{
+  "name": "aura-os",
+  "productName": "AURA OS",
+  "version": "1.0.0",
+  "description": "AURA OS — Agentic Unified Runtime Architecture. A desktop orchestration layer for AI agents (Claude Code, Codex, Gemini, Hermes, local LLMs) with Obsidian shared memory and a built-in Telegram remote terminal.",
+  "main": "main.js",
+  "author": "AURA OS",
+  "license": "MIT",
+  "homepage": "https://github.com/your-org/aura-os",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/aura-os.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "pack": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "os.aura.desktop",
+    "productName": "AURA OS",
+    "copyright": "Copyright © 2026 AURA OS",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AURA OS"
+    },
+    "portable": {
+      "artifactName": "AURA-OS-${version}-portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "maintainer": "AURA OS",
+      "synopsis": "Orchestration layer for AI agents with a Telegram remote terminal"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

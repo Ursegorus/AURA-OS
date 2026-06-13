@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>AURA OS</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">A</div>
+        <div>
+          <div class="brand-name">AURA <span>OS</span></div>
+          <div class="brand-tag" data-i18n="tagline"></div>
+        </div>
+      </div>
+      <nav>
+        <button class="nav-btn active" data-view="dashboard"><span class="ico">◈</span><span data-i18n="nav_dashboard"></span></button>
+        <button class="nav-btn" data-view="agents"><span class="ico">⬡</span><span data-i18n="nav_agents"></span><span id="agent-count" class="badge"></span></button>
+        <button class="nav-btn" data-view="memory"><span class="ico">◎</span><span data-i18n="nav_memory"></span></button>
+        <button class="nav-btn" data-view="settings"><span class="ico">⚙</span><span data-i18n="nav_settings"></span></button>
+      </nav>
+      <div class="sidebar-footer">v1.0.0</div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="view active">
+        <div class="composer">
+          <textarea id="task-input" rows="3" data-i18n-ph="input_placeholder"></textarea>
+          <div class="composer-actions">
+            <button id="btn-voice" class="btn ghost" title="">🎤 <span data-i18n="voice"></span></button>
+            <button id="btn-run" class="btn primary">▶ <span data-i18n="run"></span></button>
+          </div>
+        </div>
+        <div id="task-list" class="task-list"></div>
+      </section>
+
+      <!-- AGENTS -->
+      <section id="view-agents" class="view">
+        <div class="view-head">
+          <h2 data-i18n="agents_title"></h2>
+          <div>
+            <button id="btn-refresh-agents" class="btn ghost" data-i18n="agents_refresh"></button>
+            <button id="btn-add-agent" class="btn primary">+ <span data-i18n="agent_add"></span></button>
+          </div>
+        </div>
+        <div id="agents-grid" class="agents-grid"></div>
+      </section>
+
+      <!-- MEMORY -->
+      <section id="view-memory" class="view">
+        <div class="view-head">
+          <h2 data-i18n="memory_title"></h2>
+          <button id="btn-open-vault" class="btn ghost" data-i18n="memory_open"></button>
+        </div>
+        <div class="memory-layout">
+          <div id="memory-list" class="memory-list"></div>
+          <pre id="memory-content" class="memory-content"></pre>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="view-settings" class="view">
+        <div class="view-head"><h2 data-i18n="settings_title"></h2></div>
+        <div class="settings-card">
+          <label data-i18n="set_vault"></label>
+          <div class="row"><input id="set-vault" type="text" readonly /><button class="btn ghost" id="pick-vault" data-i18n="set_pick"></button></div>
+
+          <label data-i18n="set_workspace"></label>
+          <div class="row"><input id="set-workspace" type="text" readonly /><button class="btn ghost" id="pick-workspace" data-i18n="set_pick"></button></div>
+
+          <label data-i18n="set_coordinator"></label>
+          <select id="set-coordinator"></select>
+
+          <div class="row gap">
+            <div class="col">
+              <label data-i18n="set_parallel"></label>
+              <input id="set-parallel" type="number" min="1" max="8" />
+            </div>
+            <div class="col">
+              <label data-i18n="set_fix"></label>
+              <input id="set-fix" type="number" min="0" max="5" />
+            </div>
+          </div>
+
+          <label class="check"><input id="set-review" type="checkbox" /> <span data-i18n="set_review"></span></label>
+
+          <div class="tg-section">
+            <h3 data-i18n="tg_title"></h3>
+            <p class="hint" data-i18n="tg_hint"></p>
+            <label class="check"><input id="set-tg-enabled" type="checkbox" /> <span data-i18n="tg_enable"></span></label>
+            <label data-i18n="tg_token"></label>
+            <input id="set-tg-token" type="password" autocomplete="off" placeholder="123456:ABC-DEF…" />
+            <label data-i18n="tg_allowed"></label>
+            <input id="set-tg-allowed" type="text" autocomplete="off" placeholder="123456789, 987654321" />
+            <div id="tg-status" class="tg-status"></div>
+          </div>
+
+          <label data-i18n="set_lang"></label>
+          <select id="set-lang">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select>
+
+          <button id="btn-save-settings" class="btn primary" data-i18n="save"></button>
+          <span id="settings-saved" class="saved-note"></span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Add agent modal -->
+  <div id="modal-agent" class="modal hidden">
+    <div class="modal-card">
+      <h3 data-i18n="agent_add_title"></h3>
+      <label data-i18n="agent_name"></label><input id="ag-name" type="text" placeholder="My Agent" />
+      <label data-i18n="agent_command"></label><input id="ag-command" type="text" placeholder="my-agent" />
+      <label data-i18n="agent_args"></label><input id="ag-args" type="text" value="{prompt}" />
+      <label data-i18n="agent_model"></label><input id="ag-model" type="text" placeholder="llama3" />
+      <label data-i18n="agent_skills"></label><input id="ag-skills" type="text" placeholder="coding, research" />
+      <label data-i18n="agent_roles"></label><input id="ag-roles" type="text" value="coder" />
+      <div class="row right">
+        <button class="btn ghost" id="ag-cancel" data-i18n="close"></button>
+        <button class="btn primary" id="ag-save" data-i18n="save"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
