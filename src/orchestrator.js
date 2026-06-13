@@ -32,8 +32,16 @@ class Orchestrator {
       maxParallel: this.store.get('maxParallel', 3),
       maxFixRounds: this.store.get('maxFixRounds', 2),
       workspace: this.store.get('workspace', ''),
-      reviewEnabled: this.store.get('reviewEnabled', true)
+      reviewEnabled: this.store.get('reviewEnabled', true),
+      smartRouting: this.store.get('smartRouting', false)
     };
+  }
+
+  /** Pick a model for a subtask by complexity tier (see docs/MODEL_ROUTING.md). */
+  routeModel(agent, complexity) {
+    if (!this.settings().smartRouting) return undefined;
+    if (!agent || !agent.models) return undefined;
+    return agent.models[complexity] || agent.models.standard;
   }
 
   workspaceDir() {
@@ -63,7 +71,9 @@ class Orchestrator {
       '"""' + input + '"""',
       '',
       'Ответь ТОЛЬКО валидным JSON-массивом без пояснений и без markdown. Формат каждого элемента:',
-      '{"id":"t1","title":"короткое название","agent":"<id агента>","role":"coder|reviewer|researcher|writer","prompt":"полная самодостаточная инструкция для агента","dependsOn":["t0"]}',
+      '{"id":"t1","title":"короткое название","agent":"<id агента>","role":"coder|reviewer|researcher|writer","complexity":"trivial|standard|complex","prompt":"полная самодостаточная инструкция для агента","dependsOn":["t0"]}',
+      '',
+      'Поле complexity (для экономной маршрутизации моделей): "trivial" — форматирование, конвертация, простые правки; "standard" — обычный код, ресёрч, тексты, ревью; "complex" — архитектура, сложный кодинг, отладка, многошаговое рассуждение.',
       '',
       'Правила: 1-6 подзадач; prompt пишется так, будто агент не видит других подзадач; независимые подзадачи не указывают dependsOn (они выполнятся параллельно); если задача связана с кодом — последней подзадачей сделай ревью кода агентом с ролью reviewer; все файлы создаются в текущей рабочей директории.'
     ].join('\n');
@@ -77,11 +87,13 @@ class Orchestrator {
     try { arr = JSON.parse(match[0]); } catch (e) { return null; }
     if (!Array.isArray(arr) || arr.length === 0) return null;
     const ids = new Set(available.map(a => a.id));
+    const tiers = new Set(['trivial', 'standard', 'complex']);
     return arr.map((st, i) => ({
       id: st.id || 't' + (i + 1),
       title: st.title || 'Подзадача ' + (i + 1),
       agent: ids.has(st.agent) ? st.agent : available[0].id,
       role: st.role || 'coder',
+      complexity: tiers.has(st.complexity) ? st.complexity : 'standard',
       prompt: st.prompt || '',
       dependsOn: Array.isArray(st.dependsOn) ? st.dependsOn : [],
       status: 'pending',
@@ -94,11 +106,12 @@ class Orchestrator {
     const reviewer = available.find(a => a.roles.includes('reviewer') && a.id !== coder.id);
     const plan = [{
       id: 't1', title: 'Выполнение задачи', agent: coder.id, role: 'coder',
-      prompt: input, dependsOn: [], status: 'pending', output: ''
+      complexity: 'complex', prompt: input, dependsOn: [], status: 'pending', output: ''
     }];
     if (reviewer && this.settings().reviewEnabled) {
       plan.push({
         id: 't2', title: 'Проверка результата', agent: reviewer.id, role: 'reviewer',
+        complexity: 'standard',
         prompt: 'Проверь результат работы в текущей директории по задаче: "' + input +
           '". Найди ошибки и недочёты. Если всё корректно, ответь строкой APPROVED. Иначе перечисли проблемы.',
         dependsOn: ['t1'], status: 'pending', output: ''
@@ -208,8 +221,13 @@ class Orchestrator {
           .map(d => `Результат шага «${d.title}» (${d.agentName}):\n${(d.output || '').slice(-3000)}`)
           .join('\n\n');
         const prompt = depContext ? depContext + '\n\n---\n\n' + st.prompt : st.prompt;
+        const model = this.routeModel(this.agents.getAgent(st.agent), st.complexity);
+        if (model) {
+          st.model = model;
+          this.emit({ type: 'log', taskId: task.id, agent: st.agent, subtask: st.id, text: `[AURA] Модель для «${st.title}» (${st.complexity}): ${model}\n` });
+        }
         const p = this.agents.run(st.agent, prompt, {
-          cwd, runId: task.id + ':' + st.id,
+          cwd, runId: task.id + ':' + st.id, model,
           onData: t => this.emit({ type: 'log', taskId: task.id, agent: st.agent, subtask: st.id, text: t })
         }).then(res => {
           st.output = res.output;
@@ -237,17 +255,20 @@ class Orchestrator {
         const fixerAgent = this.agents.getAgent(fixer);
         this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: `\n[AURA] Ревью нашло проблемы — раунд исправления ${round}/${maxFixRounds} (${fixerAgent ? fixerAgent.name : fixer})…\n` });
 
+        const fixComplexity = target ? (target.complexity || 'complex') : 'complex';
         const fixSt = {
           id: review.id + '-fix' + round, title: 'Исправление (раунд ' + round + ')',
           agent: fixer, agentName: fixerAgent ? fixerAgent.name : fixer, role: 'coder',
-          prompt: '', dependsOn: [], status: 'running', output: ''
+          complexity: fixComplexity, prompt: '', dependsOn: [], status: 'running', output: ''
         };
+        const fixModel = this.routeModel(fixerAgent, fixComplexity);
+        if (fixModel) fixSt.model = fixModel;
         task.subtasks.push(fixSt);
         this.emit({ type: 'task-updated', task: this.publicTask(task) });
 
         const fixRes = await this.agents.run(fixer,
           `Ревьюер нашёл проблемы в работе по задаче: "${task.input}".\n\nЗамечания ревьюера:\n${verdict.slice(-4000)}\n\nИсправь все перечисленные проблемы в файлах текущей директории. После исправления кратко перечисли, что изменил.`,
-          { cwd, runId: task.id + ':' + fixSt.id, onData: t => this.emit({ type: 'log', taskId: task.id, agent: fixer, subtask: fixSt.id, text: t }) });
+          { cwd, runId: task.id + ':' + fixSt.id, model: fixModel, onData: t => this.emit({ type: 'log', taskId: task.id, agent: fixer, subtask: fixSt.id, text: t }) });
         fixSt.output = fixRes.output;
         fixSt.status = fixRes.ok ? 'done' : 'failed';
         this.emit({ type: 'task-updated', task: this.publicTask(task) });
@@ -255,7 +276,7 @@ class Orchestrator {
 
         const reRes = await this.agents.run(review.agent,
           `Повторно проверь работу в текущей директории по задаче: "${task.input}". Если всё корректно — ответь строкой APPROVED. Иначе перечисли оставшиеся проблемы.`,
-          { cwd, runId: task.id + ':' + review.id + '-re' + round, onData: t => this.emit({ type: 'log', taskId: task.id, agent: review.agent, subtask: review.id, text: t }) });
+          { cwd, runId: task.id + ':' + review.id + '-re' + round, model: this.routeModel(this.agents.getAgent(review.agent), review.complexity || 'standard'), onData: t => this.emit({ type: 'log', taskId: task.id, agent: review.agent, subtask: review.id, text: t }) });
         verdict = reRes.ok ? reRes.output : '';
         review.output += '\n\n--- Повторное ревью (раунд ' + round + ') ---\n' + reRes.output;
       }
@@ -287,6 +308,7 @@ class Orchestrator {
       subtasks: task.subtasks.map(st => ({
         id: st.id, title: st.title, agent: st.agent, agentName: st.agentName,
         role: st.role, status: st.status, dependsOn: st.dependsOn,
+        complexity: st.complexity, model: st.model,
         output: (st.output || '').slice(-4000)
       }))
     };

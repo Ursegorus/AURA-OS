@@ -19,6 +19,9 @@ const BUILTIN_AGENTS = [
     detectArgs: ['--version'],
     skills: ['coding', 'architecture', 'refactoring', 'writing', 'planning', 'analysis'],
     roles: ['coordinator', 'coder', 'reviewer', 'writer'],
+    // Smart model routing: CLI flag + model alias per complexity tier.
+    modelFlag: '--model',
+    models: { trivial: 'haiku', standard: 'sonnet', complex: 'opus' },
     color: '#d97757',
     builtin: true
   },
@@ -155,13 +158,19 @@ class AgentManager {
    * Run a prompt on an agent. Streams output via onData(chunk).
    * Returns a promise resolving to { ok, output, code }.
    */
-  run(agentId, prompt, { cwd, onData, timeoutMs = 15 * 60 * 1000, runId } = {}) {
+  run(agentId, prompt, { cwd, onData, timeoutMs = 15 * 60 * 1000, runId, model } = {}) {
     const agent = this.getAgent(agentId);
     if (!agent) return Promise.resolve({ ok: false, output: 'Unknown agent: ' + agentId, code: -1 });
 
-    const args = agent.args.map(a =>
-      a.replace('{prompt}', prompt).replace('{model}', agent.model || '')
+    let args = agent.args.map(a =>
+      a.replace('{prompt}', prompt).replace('{model}', model || agent.model || '')
     ).filter(a => a.length > 0);
+
+    // Smart model routing: inject the model flag when a model is chosen and the
+    // agent declares how to set it (and {model} isn't already part of its args).
+    if (model && agent.modelFlag && !agent.args.some(a => a.includes('{model}'))) {
+      args = [agent.modelFlag, model, ...args];
+    }
 
     return new Promise(resolve => {
       let output = '';
