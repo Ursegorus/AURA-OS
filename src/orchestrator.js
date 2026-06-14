@@ -34,7 +34,8 @@ class Orchestrator {
       maxParallel: this.store.get('maxParallel', 3),
       maxFixRounds: this.store.get('maxFixRounds', 2),
       workspace: this.store.get('workspace', ''),
-      reviewEnabled: this.store.get('reviewEnabled', true)
+      reviewEnabled: this.store.get('reviewEnabled', true),
+      trustedDirs: this.store.get('trustedDirs', [])
     };
   }
 
@@ -77,7 +78,9 @@ class Orchestrator {
       '',
       'Поле complexity (для экономной маршрутизации моделей): "trivial" — форматирование, конвертация, простые правки; "standard" — обычный код, ресёрч, тексты, ревью; "complex" — архитектура, сложный кодинг, отладка, многошаговое рассуждение.',
       '',
-      'Правила: 1-6 подзадач; prompt пишется так, будто агент не видит других подзадач; независимые подзадачи не указывают dependsOn (они выполнятся параллельно); если задача связана с кодом — последней подзадачей сделай ревью кода агентом с ролью reviewer; все файлы создаются в текущей рабочей директории.'
+      'Назначай агентов СТРОГО по их реальным навыкам, а не по порядку в списке. Если подзадача требует поиска в интернете, актуальных данных, анализа сайтов или сбора источников — назначай её агенту, у которого в навыках есть "web-search" (если таких несколько — выбери наиболее подходящего по остальным навыкам). Не поручай веб-поиск агенту без "web-search".',
+      '',
+      'Правила: 1-6 подзадач; prompt пишется так, будто агент не видит других подзадач; независимые подзадачи не указывают dependsOn (они выполнятся параллельно); если задача связана с кодом — последней подзадачей сделай ревью кода агентом с ролью reviewer, отличным от исполнителя; все файлы создаются в текущей рабочей директории.'
     ].join('\n');
   }
 
@@ -164,7 +167,7 @@ class Orchestrator {
 
     if (available.length > 1 || coordinator) {
       const res = await this.agents.run(coordinator.id, this.planningPrompt(task.input, available), {
-        cwd, runId: task.id + ':plan',
+        cwd, runId: task.id + ':plan', addDirs: s.trustedDirs,
         onData: t => this.emit({ type: 'log', taskId: task.id, agent: coordinator.id, text: t })
       });
       if (res.ok) plan = this.parsePlan(res.output, available);
@@ -229,7 +232,7 @@ class Orchestrator {
           this.emit({ type: 'log', taskId: task.id, agent: st.agent, subtask: st.id, text: `[AURA] Модель для «${st.title}» (${st.complexity}): ${model}\n` });
         }
         const p = this.agents.run(st.agent, prompt, {
-          cwd, runId: task.id + ':' + st.id, model,
+          cwd, runId: task.id + ':' + st.id, model, addDirs: this.settings().trustedDirs,
           onData: t => this.emit({ type: 'log', taskId: task.id, agent: st.agent, subtask: st.id, text: t })
         }).then(res => {
           st.output = res.output;
@@ -270,7 +273,7 @@ class Orchestrator {
 
         const fixRes = await this.agents.run(fixer,
           `Ревьюер нашёл проблемы в работе по задаче: "${task.input}".\n\nЗамечания ревьюера:\n${verdict.slice(-4000)}\n\nИсправь все перечисленные проблемы в файлах текущей директории. После исправления кратко перечисли, что изменил.`,
-          { cwd, runId: task.id + ':' + fixSt.id, model: fixModel, onData: t => this.emit({ type: 'log', taskId: task.id, agent: fixer, subtask: fixSt.id, text: t }) });
+          { cwd, runId: task.id + ':' + fixSt.id, model: fixModel, addDirs: this.settings().trustedDirs, onData: t => this.emit({ type: 'log', taskId: task.id, agent: fixer, subtask: fixSt.id, text: t }) });
         fixSt.output = fixRes.output;
         fixSt.status = fixRes.ok ? 'done' : 'failed';
         this.emit({ type: 'task-updated', task: this.publicTask(task) });
@@ -278,7 +281,7 @@ class Orchestrator {
 
         const reRes = await this.agents.run(review.agent,
           `Повторно проверь работу в текущей директории по задаче: "${task.input}". Если всё корректно — ответь строкой APPROVED. Иначе перечисли оставшиеся проблемы.`,
-          { cwd, runId: task.id + ':' + review.id + '-re' + round, model: this._routeModel(this.agents.getAgent(review.agent), review.complexity || 'standard'), onData: t => this.emit({ type: 'log', taskId: task.id, agent: review.agent, subtask: review.id, text: t }) });
+          { cwd, runId: task.id + ':' + review.id + '-re' + round, model: this._routeModel(this.agents.getAgent(review.agent), review.complexity || 'standard'), addDirs: this.settings().trustedDirs, onData: t => this.emit({ type: 'log', taskId: task.id, agent: review.agent, subtask: review.id, text: t }) });
         verdict = reRes.ok ? reRes.output : '';
         review.output += '\n\n--- Повторное ревью (раунд ' + round + ') ---\n' + reRes.output;
       }

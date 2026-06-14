@@ -28,7 +28,8 @@ body {
 /* ---------- Title Bar ---------- */
 .titlebar {
   display: flex; align-items: center; height: 38px;
-  background: var(--bg); border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg2), #0c111d);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0; user-select: none;
   -webkit-app-region: no-drag;
 }
@@ -53,10 +54,11 @@ body {
 }
 .tb-btn {
   width: 46px; border: none; background: transparent;
-  color: var(--muted); font-size: 12px; cursor: pointer;
+  color: var(--muted); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: background .1s;
 }
+.tb-btn svg { display: block; }
 .tb-btn:hover { background: var(--card2); color: var(--text); }
 .tb-btn.tb-close:hover { background: var(--err); color: #fff; }
 

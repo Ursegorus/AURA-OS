@@ -69,6 +69,8 @@ function createWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+  win.on('maximize', () => win.webContents.send('window:maximized'));
+  win.on('unmaximize', () => win.webContents.send('window:unmaximized'));
 }
 
 app.whenReady().then(() => {
@@ -151,5 +153,3 @@ ipcMain.handle('window:maximize', () => {
 });
 ipcMain.handle('window:close', () => { if (win && !win.isDestroyed()) win.close(); });
 ipcMain.handle('window:isMaximized', () => win && !win.isDestroyed() && win.isMaximized());
-win.on('maximize', () => win.webContents.send('window:maximized'));
-win.on('unmaximize', () => win.webContents.send('window:unmaximized'));

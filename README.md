@@ -104,6 +104,20 @@ build/           Icons for electron-builder
 docs/            Documentation & marketing (converted from PDF)
 ```
 
+## Support
+
+AURA OS is free and open-source (MIT). If it saves you time, you can support
+development — and get early access to the upcoming **Pro** version:
+
+[![Boosty](https://img.shields.io/badge/Boosty-Support-f15f2c)](https://boosty.to/aura_os)
+
+- **☕ Support** — a thank-you in the changelog.
+- **⭐ Early backer** — your name in this README + priority on the Pro waitlist.
+- **🔥 Pro pre-order** — a Pro licence at ~40% off the future price; you get your
+  activation key the moment Pro ships.
+
+[**→ Support on Boosty**](https://boosty.to/aura_os)
+
 ---
 
 ## Русский
@@ -164,6 +178,20 @@ npm run dist:linux   # сборка под Linux (на Linux)
 
 Готовые установщики появятся в папке `dist/`. Linux-сборку проще всего получить через
 встроенный GitHub Actions workflow — он собирает Windows и Linux на нативных раннерах.
+
+### Поддержать проект
+
+AURA OS — бесплатный проект с открытым кодом (MIT). Если он экономит вам время,
+вы можете поддержать разработку и получить ранний доступ к версии **Pro**:
+
+[![Boosty](https://img.shields.io/badge/Boosty-Поддержать-f15f2c)](https://boosty.to/aura_os)
+
+- **☕ Поддержать** — благодарность в changelog.
+- **⭐ Ранний сторонник** — ваше имя в README + приоритет в вейтлисте Pro.
+- **🔥 Предзаказ Pro** — лицензия Pro со скидкой ~40% от будущей цены; ключ активации
+  придёт сразу, как только выйдет Pro.
+
+[**→ Поддержать на Boosty**](https://boosty.to/aura_os)
 
 ## License
 

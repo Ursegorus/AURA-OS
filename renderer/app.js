@@ -22,17 +22,17 @@ $('#tb-minimize').addEventListener('click', () => window.aura.window.minimize())
 $('#tb-maximize').addEventListener('click', () => window.aura.window.maximize());
 $('#tb-close').addEventListener('click', () => window.aura.window.close());
 window.aura.window.onMaximized(() => {
-  $('#tb-maximize').textContent = '⊡';
+  $('#tb-maximize').innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="3.5" y="0.5" width="8" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 2v7.5a1.5 1.5 0 001.5 1.5H11" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 2h6a1.5 1.5 0 011.5 1.5V10" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
   $('#tb-maximize').title = 'Восстановить';
 });
 window.aura.window.onUnmaximized(() => {
-  $('#tb-maximize').textContent = '□';
+  $('#tb-maximize').innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
   $('#tb-maximize').title = 'Развернуть';
 });
 // Sync initial state
 window.aura.window.isMaximized().then(m => {
   if (m) {
-    $('#tb-maximize').textContent = '⊡';
+    $('#tb-maximize').innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12"><rect x="3.5" y="0.5" width="8" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 2v7.5a1.5 1.5 0 001.5 1.5H11" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 2h6a1.5 1.5 0 011.5 1.5V10" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
     $('#tb-maximize').title = 'Восстановить';
   }
 });

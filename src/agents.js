@@ -15,10 +15,14 @@ const BUILTIN_AGENTS = [
     name: 'Claude Code',
     vendor: 'Anthropic',
     command: 'claude',
-    args: ['-p', '{prompt}'],
+    // -p: headless print mode. --dangerously-skip-permissions: в headless-режиме
+    // агент не может спросить разрешение, поэтому без этого флага он отказывается
+    // править файлы и запускать команды. addDirFlag даёт доступ к папкам вне cwd.
+    args: ['-p', '--dangerously-skip-permissions', '{prompt}'],
+    addDirFlag: '--add-dir',
     needsShell: false,
     detectArgs: ['--version'],
-    skills: ['coding', 'architecture', 'refactoring', 'writing', 'planning', 'analysis'],
+    skills: ['coding', 'architecture', 'refactoring', 'writing', 'planning', 'analysis', 'web-search'],
     roles: ['coordinator', 'coder', 'reviewer', 'writer'],
     color: '#d97757',
     builtin: true
@@ -42,10 +46,15 @@ const BUILTIN_AGENTS = [
     name: 'Gemini CLI',
     vendor: 'Google',
     command: 'gemini',
-    args: ['-p', '{prompt}'],
+    // gemini — .cmd-шим на Windows, нужен shell, а shell режет промпт по пробелам.
+    // Поэтому промпт идём через stdin (gemini дописывает stdin к значению -p),
+    // -p получает заглушку «.», --skip-trust снимает гейт доверия папке,
+    // --approval-mode yolo авто-подтверждает инструменты в headless-режиме.
+    args: ['-p', '.', '--skip-trust', '--approval-mode', 'yolo'],
+    stdinPrompt: true,
     needsShell: true,
     detectArgs: ['--version'],
-    skills: ['coding', 'research', 'long-context', 'analysis'],
+    skills: ['coding', 'research', 'long-context', 'analysis', 'web-search'],
     roles: ['coder', 'researcher', 'reviewer'],
     color: '#4285f4',
     builtin: true
@@ -58,8 +67,8 @@ const BUILTIN_AGENTS = [
     args: ['-z', '{prompt}', '--cli'],
     needsShell: false,
     detectArgs: ['--version'],
-    skills: ['research', 'reasoning', 'tool-use'],
-    roles: ['researcher', 'coder'],
+    skills: ['research', 'reasoning', 'tool-use', 'code-review', 'web-search'],
+    roles: ['researcher', 'coder', 'reviewer', 'coordinator'],
     color: '#a78bfa',
     builtin: true
   },
@@ -168,7 +177,7 @@ class AgentManager {
    * Run a prompt on an agent. Streams output via onData(chunk).
    * Returns a promise resolving to { ok, output, code }.
    */
-  run(agentId, prompt, { cwd, onData, timeoutMs = 15 * 60 * 1000, runId, model } = {}) {
+  run(agentId, prompt, { cwd, onData, timeoutMs = 15 * 60 * 1000, runId, model, addDirs } = {}) {
     const agent = this.getAgent(agentId);
     if (!agent) return Promise.resolve({ ok: false, output: 'Unknown agent: ' + agentId, code: -1 });
 
@@ -186,6 +195,11 @@ class AgentManager {
     // agent declares how to set it (and {model} isn't already part of its args).
     if (model && agent.modelFlag && !agent.args.some(a => a.includes('{model}'))) {
       args = [agent.modelFlag, model, ...args];
+    }
+
+    // Grant the agent access to extra directories (outside cwd) if it supports it.
+    if (agent.addDirFlag && Array.isArray(addDirs) && addDirs.length) {
+      args = [agent.addDirFlag, ...addDirs, ...args];
     }
 
     return new Promise(resolve => {

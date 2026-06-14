@@ -94,6 +94,7 @@
     }
   },
   "dependencies": {
-    "aura-pro": "git+https://github.com/Ursegorus/aura-pro.git"
+    "aura-pro": "git+https://github.com/Ursegorus/aura-pro.git",
+    "electron-download": "^4.1.1"
   }
 }
