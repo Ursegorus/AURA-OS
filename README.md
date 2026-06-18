@@ -6,9 +6,14 @@ into a single managed team. You describe a task; AURA decomposes it into subtask
 routes them to agents by skill, runs them in parallel, cross-reviews the results,
 and stores everything in a shared Obsidian memory.
 
+Since **v1.0.1**, AURA OS can use **Hermes Agent as its AI engine** — instead of the
+built-in orchestrator, the entire `PLAN → EXECUTE → REVIEW` pipeline is handled by
+Hermes, which brings skills, memory, MCP, cron, and multi-agent orchestration to
+AURA OS.
+
 It ships as a **true standalone desktop application** (Electron — its own window, not
-a browser tab) for **Windows and Linux**, and includes a built-in **Telegram remote
-terminal** so you can drive the machine from your phone while the app is running.
+a browser tab) for **Windows, Linux, and macOS**, and includes a built-in **Telegram
+remote terminal** so you can drive the machine from your phone while the app is running.
 
 > 🇷🇺 Русская версия — ниже, в разделе [Русский](#русский).
 
@@ -17,14 +22,41 @@ terminal** so you can drive the machine from your phone while the app is running
 ## Features
 
 - **Multi-agent orchestration** — `PLAN → EXECUTE → REVIEW/FIX → MEMORY` pipeline.
+  Two engines: built-in (legacy) or **Hermes Agent** (recommended, v1.0.1+).
+- **Hermes AI engine** — when enabled, Hermes Agent handles planning, agent routing,
+  review, and fixes. Hermes skills (`aura-os-orchestrator`, `claude-code`, `codex`,
+  `opencode`) are pre-loaded. View and manage skills, cron jobs, and MCP servers
+  directly from AURA OS UI.
 - **Auto-detection** of installed agent CLIs (`claude`, `codex`, `gemini`, `hermes`, `ollama`) plus custom agents.
 - **Shared memory** backed by an Obsidian vault (markdown notes + rolling index).
+  Two-way sync with Hermes session memory.
 - **Telegram remote terminal** — a zero-dependency bot that stays online for the
   whole lifetime of the app. Send shell commands, run AURA tasks, list agents — all
   from Telegram. Restricted to an explicit chat-ID allowlist.
-- **Cross-platform** — Windows (NSIS installer + portable `.exe`) and Linux
-  (AppImage + `.deb`).
+- **Cross-platform** — Windows (NSIS installer + portable `.exe`), Linux
+  (AppImage + `.deb`), and macOS (`.dmg`).
 - **RU / EN** interface.
+
+## Hermes AI engine
+
+> Requires [Hermes Agent](https://hermes-agent.nousresearch.com) installed.
+
+Enable in **Settings → Hermes AI engine**. When on, AURA OS delegates task
+orchestration to Hermes Agent:
+
+1. AURA sends your task to `hermes -p aura-os chat -q "..."` with the
+   `aura-os-orchestrator` skill pre-loaded.
+2. Hermes plans, spawns CLI agents (Claude Code, Codex, Gemini, Ollama) via
+   `delegate_task`, reviews results, and fixes issues.
+3. The output is streamed to AURA OS UI and saved to Obsidian memory.
+4. Hermes memory is also synced (task summary sent to Hermes on completion).
+
+The **Hermes** tab in AURA OS lets you inspect installed skills, scheduled cron
+jobs, and configured MCP servers — all driven by `hermes skills list`,
+`hermes cron list`, and `hermes mcp list`.
+
+A profile `aura-os` is auto-created by Hermes during first run. No manual setup
+needed.
 
 ## Telegram remote terminal
 
@@ -44,7 +76,7 @@ Bot commands:
 
 | Command | Action |
 | --- | --- |
-| *(any text)* | Run it as a shell command (PowerShell on Windows, bash on Linux). The working directory persists between messages. |
+| _(any text)_ | Run it as a shell command (PowerShell on Windows, bash on Linux). The working directory persists between messages. |
 | `/pwd` | Show the current working directory |
 | `/cd <path>` | Change the working directory |
 | `/kill` | Terminate the command currently running |
@@ -57,64 +89,66 @@ Bot commands:
 
 Download the latest build from the [Releases](../../releases) page:
 
-- **Windows:** `AURA-OS-Setup-<version>.exe` (installer) or `AURA-OS-<version>-portable.exe`.
-- **Linux:** `AURA-OS-<version>.AppImage` (`chmod +x` then run) or the `.deb` package.
+| Platform | Files |
+|----------|-------|
+| **Windows** | `AURA-OS-Setup-<version>.exe` (installer) • `AURA-OS-<version>-portable.exe` |
+| **Linux** | `AURA-OS-<version>.AppImage` (`chmod +x` then run) • `.deb` package |
+| **macOS** | `AURA-OS-<version>.dmg` |
 
 ### Requirements
 
-- Windows 10/11 x64, or a modern x64 Linux desktop.
+- Windows 10/11 x64, modern x64 Linux desktop, or macOS 12+.
 - At least one agent CLI installed and on `PATH`:
   - Claude Code — `npm install -g @anthropic-ai/claude-code`
   - Codex CLI — `npm install -g @openai/codex`
   - Gemini CLI — `npm install -g @google/gemini-cli`
   - Ollama — <https://ollama.com> (local models, offline)
+- **Hermes Agent** (optional, for AI engine mode) — see [install guide](https://hermes-agent.nousresearch.com/docs/category/getting-started).
 - Obsidian (optional) — set the vault path in Settings to enable shared memory.
 
 ## Develop & build
 
 ```bash
-npm install        # install Electron + electron-builder
-npm start          # run the app in dev mode
+npm install          # install Electron + electron-builder
+npm start            # run the app in dev mode
 
-npm run dist:win   # build Windows installer + portable (run on Windows)
-npm run dist:linux # build AppImage + .deb (run on Linux)
-npm run pack       # unpacked build for quick testing
+npm run dist:win     # build Windows installer + portable (on Windows)
+npm run dist:linux   # build AppImage + .deb (on Linux)
+# macOS — use the CI or run on macOS:
+npx electron-builder --mac --publish never
+npm run pack         # unpacked build for quick testing
 ```
 
 Build artifacts land in `dist/`. Cross-building Linux packages on Windows requires
-Docker; the simplest path is the bundled GitHub Actions workflow (see below), which
-builds Windows and Linux artifacts on their native runners.
+Docker; the simplest path is the bundled GitHub Actions workflow (see below).
 
 ### Automated releases
 
-Pushing a tag like `v1.0.0` triggers `.github/workflows/release.yml`, which builds on
-`windows-latest` and `ubuntu-latest` and attaches the installers to a GitHub Release.
+Push a tag like `v1.0.1` → GitHub Actions builds on `windows-latest`, `ubuntu-latest`,
+and `macos-latest`, then attaches all installers to a GitHub Release. Pushes to `main`
+also build artifacts (without publishing a release).
 
 ## Project layout
 
 ```
-main.js          Electron main process (windows, IPC, lifecycle)
-preload.js       Secure context bridge (window.aura.*)
-src/agents.js    Agent registry, detection, process runner
-src/orchestrator.js  PLAN → EXECUTE → REVIEW/FIX → MEMORY pipeline
-src/memory.js    Obsidian-backed shared memory
-src/telegram.js  Telegram remote terminal (zero-dependency long polling)
-renderer/        Dark UI (HTML/CSS/JS), RU/EN i18n
-build/           Icons for electron-builder
-docs/            Documentation & marketing (converted from PDF)
+main.js              Electron main process (windows, IPC, lifecycle)
+preload.js           Secure context bridge (window.aura.*)
+src/agents.js        Agent registry, detection, process runner
+src/orchestrator.js  Orchestrator (Legacy) + HermesEngine (AI engine)
+src/memory.js        Obsidian-backed shared memory
+src/telegram.js      Telegram remote terminal (zero-dep long polling)
+renderer/            Dark UI (HTML/CSS/JS), RU/EN i18n
+.github/workflows/   CI: build Windows, Linux, macOS on push/tag
+build/               Icons for electron-builder
+docs/                Documentation & marketing
 ```
 
 ## Support
 
 AURA OS is free and open-source (MIT). If it saves you time, you can support
-development — and get early access to the upcoming **Pro** version:
+development:
 
 [![Boosty](https://img.shields.io/badge/Boosty-Support-f15f2c)](https://boosty.to/aura_os)
-
-- **☕ Support** — a thank-you in the changelog.
-- **⭐ Early backer** — your name in this README + priority on the Pro waitlist.
-- **🔥 Pro pre-order** — a Pro licence at ~40% off the future price; you get your
-  activation key the moment Pro ships.
 
 [**→ Support on Boosty**](https://boosty.to/aura_os)
 
@@ -128,44 +162,35 @@ development — and get early access to the upcoming **Pro** version:
 раскладывает её на подзадачи, распределяет по агентам с учётом навыков, запускает
 параллельно, организует перекрёстную проверку и сохраняет всё в общую память Obsidian.
 
+Начиная с **v1.0.1** AURA OS может использовать **Hermes Agent как AI-движок** —
+весь конвейер ПЛАН→ИСПОЛНЕНИЕ→РЕВЬЮ обрабатывает Hermes.
+
 Это **настоящее отдельное desktop-приложение** (Electron — собственное окно, а не
-вкладка браузера) для **Windows и Linux**, со встроенным **Telegram-терминалом** для
-удалённого управления компьютером, пока приложение запущено.
+вкладка браузера) для **Windows, Linux и macOS**, со встроенным **Telegram-терминалом**.
 
 ### Возможности
 
 - Мультиагентный конвейер `ПЛАН → ИСПОЛНЕНИЕ → РЕВЬЮ/ФИКС → ПАМЯТЬ`.
+- **Hermes AI engine** — опционально, оркестрация через Hermes Agent (skills,
+  memory, MCP, cron). Вкладка Hermes в UI: просмотр навыков, задач cron и MCP.
 - Автообнаружение установленных CLI-агентов и подключение своих.
 - Общая память на базе Obsidian (markdown-заметки + сводный индекс).
 - **Telegram-терминал** — бот без внешних зависимостей, работает всё время, пока
   открыто приложение. Выполняет shell-команды, запускает задачи AURA, показывает
   агентов. Отвечает только разрешённым chat ID.
-- Кросс-платформенность: Windows (установщик NSIS + portable) и Linux (AppImage + deb).
+- Кросс-платформенность: Windows (NSIS + portable), Linux (AppImage + deb), macOS (dmg).
 - Интерфейс RU / EN.
-
-### Telegram-терминал
-
-Бот **выключен по умолчанию**. Чтобы включить:
-
-1. Создайте бота у [@BotFather](https://t.me/BotFather), скопируйте токен.
-2. В AURA OS откройте **Настройки → Telegram-терминал**, вставьте токен, включите.
-3. Напишите боту любое сообщение, затем `/id` — узнаете свой chat ID.
-4. Добавьте chat ID в поле «Разрешённые chat ID» и сохраните.
-
-**Безопасность:** бот отвечает **только** chat ID из списка. Пустой список = доступа нет
-ни у кого (бот работает, но отклоняет все сообщения и подсказывает отправителю его
-chat ID). Команды выполняются с правами процесса AURA OS — добавляйте только доверенные
-chat ID.
 
 ### Установка
 
-Скачайте сборку со страницы [Releases](../../releases):
+Скачайте сборку со страницы [Releases](https://github.com/Ursegorus/AURA-OS/releases):
 
-- **Windows:** `AURA-OS-Setup-<версия>.exe` (установщик) или portable-версия.
-- **Linux:** `AURA-OS-<версия>.AppImage` или пакет `.deb`.
-
-Требуется хотя бы один установленный CLI-агент в `PATH` (claude / codex / gemini /
-ollama). Obsidian — опционально, для общей памяти.
+- **Windows:** установщик `.exe` или portable-версия.
+- **Linux:** AppImage (chmod +x) или .deb.
+- **macOS:** .dmg.
+- Требуется хотя бы один CLI-агент в PATH (claude / codex / gemini / ollama).
+- Hermes Agent — опционально, для режима AI engine.
+- Obsidian — опционально, для общей памяти.
 
 ### Сборка из исходников
 
@@ -176,20 +201,9 @@ npm run dist:win     # сборка под Windows (на Windows)
 npm run dist:linux   # сборка под Linux (на Linux)
 ```
 
-Готовые установщики появятся в папке `dist/`. Linux-сборку проще всего получить через
-встроенный GitHub Actions workflow — он собирает Windows и Linux на нативных раннерах.
-
 ### Поддержать проект
 
-AURA OS — бесплатный проект с открытым кодом (MIT). Если он экономит вам время,
-вы можете поддержать разработку и получить ранний доступ к версии **Pro**:
-
 [![Boosty](https://img.shields.io/badge/Boosty-Поддержать-f15f2c)](https://boosty.to/aura_os)
-
-- **☕ Поддержать** — благодарность в changelog.
-- **⭐ Ранний сторонник** — ваше имя в README + приоритет в вейтлисте Pro.
-- **🔥 Предзаказ Pro** — лицензия Pro со скидкой ~40% от будущей цены; ключ активации
-  придёт сразу, как только выйдет Pro.
 
 [**→ Поддержать на Boosty**](https://boosty.to/aura_os)
 
