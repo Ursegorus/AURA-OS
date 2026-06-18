@@ -1,8 +1,10 @@
 name: Build & Release
 
-# Build installers for Windows and Linux. Tag pushes (v*) also publish a Release.
+# Build installers for Windows, Linux, and macOS. Tag pushes (v*) also publish a Release.
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -22,6 +24,9 @@ jobs:
           - os: ubuntu-latest
             build: npm run dist:linux
             artifact: aura-os-linux
+          - os: macos-latest
+            build: npx electron-builder --mac --publish never
+            artifact: aura-os-macos
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +49,7 @@ jobs:
             dist/*.exe
             dist/*.AppImage
             dist/*.deb
+            dist/*.dmg
           if-no-files-found: ignore
 
       - name: Attach to GitHub Release
@@ -54,4 +60,5 @@ jobs:
             dist/*.exe
             dist/*.AppImage
             dist/*.deb
+            dist/*.dmg
           fail_on_unmatched_files: false
