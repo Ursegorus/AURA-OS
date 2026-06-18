@@ -55,6 +55,7 @@ $$('.hermes-tab').forEach(tab => tab.addEventListener('click', () => {
   tab.classList.add('active');
   const panel = document.getElementById('hermes-' + tab.dataset.hermesTab);
   if (panel) panel.classList.add('active');
+  if (tab.dataset.hermesTab === 'shop') return;
   loadHermesData(tab.dataset.hermesTab);
 }));
 
