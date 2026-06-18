@@ -10,11 +10,6 @@ const { Memory } = require('./src/memory');
 const { Orchestrator } = require('./src/orchestrator');
 const { TelegramTerminal } = require('./src/telegram');
 
-// ---------- Pro-версия (приватный модуль) ----------
-let pro = null;
-try { pro = require('aura-pro'); } catch (_) { /* Free version — Pro не установлен */ }
-if (pro) console.log('[AURA] Pro-модуль загружен (Smart Model Routing)');
-
 // ---------- tiny JSON settings store ----------
 class Store {
   constructor() {
@@ -31,7 +26,7 @@ class Store {
 
 let win = null;
 const store = new Store();
-const agents = new AgentManager(store, pro);
+const agents = new AgentManager(store);
 const memory = new Memory(store);
 
 // Fan out orchestrator events to both the UI and the Telegram terminal.
@@ -39,7 +34,7 @@ function dispatchEvent(event) {
   if (win && !win.isDestroyed()) win.webContents.send('aura-event', event);
   if (telegram) telegram.onAuraEvent(event);
 }
-const orchestrator = new Orchestrator(agents, memory, store, dispatchEvent, pro);
+const orchestrator = new Orchestrator(agents, memory, store, dispatchEvent);
 
 const telegram = new TelegramTerminal({
   store, orchestrator, agents,
@@ -75,7 +70,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
-  telegram.restart().catch(() => {}); // keep the remote terminal online for the app's lifetime
+  telegram.restart().catch(() => {});
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => {
@@ -112,22 +107,19 @@ ipcMain.handle('task:list', () => orchestrator.listTasks());
 ipcMain.handle('settings:get', () => ({
   vaultPath: store.get('vaultPath', ''),
   workspace: store.get('workspace', ''),
-  coordinator: store.get('coordinator', 'claude-code'),
   maxParallel: store.get('maxParallel', 3),
   maxFixRounds: store.get('maxFixRounds', 2),
   reviewEnabled: store.get('reviewEnabled', true),
-  proEnabled: pro ? store.get('smartRouting', false) : false,
-  proAvailable: !!pro,
   lang: store.get('lang', 'ru'),
   telegramEnabled: store.get('telegramEnabled', false),
   telegramToken: store.get('telegramToken', ''),
-  telegramAllowed: store.get('telegramAllowed', '')
+  telegramAllowed: store.get('telegramAllowed', ''),
+  // Hermes engine
+  useHermesEngine: store.get('useHermesEngine', false)
 }));
 ipcMain.handle('settings:set', (_e, patch) => {
   const tgKeys = ['telegramEnabled', 'telegramToken', 'telegramAllowed'];
   const tgChanged = tgKeys.some(k => k in patch);
-  // Pro-настройки мапятся в smartRouting в хранилище
-  if ('proEnabled' in patch) patch.smartRouting = patch.proEnabled;
   for (const [k, v] of Object.entries(patch)) store.set(k, v);
   if (tgChanged) telegram.restart().catch(() => {});
 });
@@ -143,6 +135,73 @@ ipcMain.handle('memory:openVault', () => {
   if (memory.isConfigured()) shell.openPath(memory.vaultPath());
 });
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
+
+// ---------- Hermes engine: skills, cron, mcp ----------
+ipcMain.handle('hermes:exec', (_e, { cmd, args: cmdArgs }) => {
+  return new Promise((resolve) => {
+    const isWin = process.platform === 'win32';
+    const fullArgs = ['-p', 'aura-os', cmd, ...(cmdArgs || [])];
+    const child = isWin
+      ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', ...fullArgs], { windowsHide: true })
+      : require('child_process').spawn('hermes', fullArgs, { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', d => { out += d.toString(); });
+    child.stderr.on('data', d => { out += d.toString(); });
+    child.on('close', (code) => resolve({ ok: code === 0, output: out.trim(), code }));
+  });
+});
+
+/** Экспорт сессий Hermes в Obsidian vault. */
+ipcMain.handle('hermes:syncToObsidian', async () => {
+  const vault = store.get('vaultPath', '');
+  if (!vault) return { ok: false, error: 'Obsidian vault not configured' };
+
+  const listRes = await new Promise(resolve => {
+    const isWin = process.platform === 'win32';
+    const child = isWin
+      ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', '-p', 'aura-os', 'sessions', 'list', '--limit', '10'], { windowsHide: true })
+      : require('child_process').spawn('hermes', ['-p', 'aura-os', 'sessions', 'list', '--limit', '10'], { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', d => { out += d.toString(); });
+    child.stderr.on('data', d => { out += d.toString(); });
+    child.on('close', (code) => resolve({ ok: code === 0, output: out.trim() }));
+  });
+  if (!listRes.ok) return { ok: false, error: listRes.output };
+
+  const auraDir = path.join(vault, 'AURA', 'Hermes');
+  if (!fs.existsSync(auraDir)) fs.mkdirSync(auraDir, { recursive: true });
+  const count = await _exportHermesSessionsToDir(auraDir, listRes.output);
+  return { ok: true, count, path: auraDir };
+});
+
+async function _exportHermesSessionsToDir(dir, listOutput) {
+  const lines = listOutput.split('\n');
+  let exported = 0;
+  for (const line of lines) {
+    const match = line.match(/^(\d{8}_\d{6}_[a-z0-9]+)\s/);
+    if (!match) continue;
+    const sessionId = match[1];
+    try {
+      const res = await new Promise(resolve => {
+        const isWin = process.platform === 'win32';
+        const child = isWin
+          ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', '-p', 'aura-os', 'sessions', 'export', sessionId, '--format', 'json'], { windowsHide: true })
+          : require('child_process').spawn('hermes', ['-p', 'aura-os', 'sessions', 'export', sessionId, '--format', 'json'], { windowsHide: true });
+        let out = '';
+        child.stdout.on('data', d => { out += d.toString(); });
+        child.stderr.on('data', d => { out += d.toString(); });
+        child.on('close', (code) => resolve({ ok: code === 0, output: out.trim() }));
+      });
+      if (res.ok && res.output) {
+        const md = `---\nsource: hermes\nsession: ${sessionId}\nexported: ${new Date().toISOString()}\n---\n\n\`\`\`json\n${res.output.slice(0, 10000)}\n\`\`\`\n`;
+        const file = path.join(dir, `${sessionId}.md`);
+        fs.writeFileSync(file, md, 'utf8');
+        exported++;
+      }
+    } catch (_) { /* skip failed exports */ }
+  }
+  return exported;
+}
 
 // ---------- Window controls ----------
 ipcMain.handle('window:minimize', () => { if (win && !win.isDestroyed()) win.minimize(); });

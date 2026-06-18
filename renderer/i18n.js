@@ -62,7 +62,13 @@ const I18N = {
     tg_allowed: 'Разрешённые chat ID (через запятую)',
     tg_status_online: 'Онлайн как @',
     tg_status_disabled: 'Выключен',
-    tg_status_error: 'Ошибка: '
+    tg_status_error: 'Ошибка: ',
+    hermes_enable: 'Использовать Hermes как AI-движок (вместо встроенного оркестратора)',
+    hermes_hint: 'Hermes Agent сам планирует, распределяет задачи по CLI-агентам (Claude Code, Codex, Gemini, Ollama), ревьюит и исправляет. Вся глубина Hermes — skills, memory, MCP — доступна из AURA OS.',
+    nav_hermes: 'Hermes',
+    hermes_refresh: 'Обновить',
+    hermes_loading: 'Загрузка…',
+    hermes_sync: 'Синхр. память'
   },
   en: {
     nav_dashboard: 'Tasks',
@@ -126,7 +132,13 @@ const I18N = {
     tg_allowed: 'Allowed chat IDs (comma-separated)',
     tg_status_online: 'Online as @',
     tg_status_disabled: 'Disabled',
-    tg_status_error: 'Error: '
+    tg_status_error: 'Error: ',
+    hermes_enable: 'Use Hermes as AI engine (instead of built-in orchestrator)',
+    hermes_hint: 'Hermes Agent plans, distributes tasks across CLI agents (Claude Code, Codex, Gemini, Ollama), reviews and fixes. Full Hermes depth — skills, memory, MCP — available from AURA OS.',
+    nav_hermes: 'Hermes',
+    hermes_refresh: 'Refresh',
+    hermes_loading: 'Loading…',
+    hermes_sync: 'Sync memory'
   }
 };
 let LANG = 'ru';

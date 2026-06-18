@@ -45,6 +45,17 @@ $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => {
   $('#view-' + btn.dataset.view).classList.add('active');
   if (btn.dataset.view === 'memory') loadMemory();
   if (btn.dataset.view === 'agents') loadAgents();
+  if (btn.dataset.view === 'hermes') loadHermesPanel();
+}));
+
+/* ---------- Hermes tabs ---------- */
+$$('.hermes-tab').forEach(tab => tab.addEventListener('click', () => {
+  $$('.hermes-tab').forEach(t => t.classList.remove('active'));
+  $$('.hermes-panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  const panel = document.getElementById('hermes-' + tab.dataset.hermesTab);
+  if (panel) panel.classList.add('active');
+  loadHermesData(tab.dataset.hermesTab);
 }));
 
 /* ---------- tasks ---------- */
@@ -111,7 +122,10 @@ async function startTask() {
 
 $('#btn-run').addEventListener('click', startTask);
 $('#task-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) startTask();
+  if (e.key === 'Enter' && !(e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    startTask();
+  }
 });
 
 /* voice input: Web Speech if available, otherwise Win+H hint */
@@ -179,7 +193,6 @@ async function loadAgents() {
     await window.aura.agents.remove(el.dataset.del);
     loadAgents();
   }));
-  fillCoordinatorSelect();
 }
 
 $('#btn-refresh-agents').addEventListener('click', loadAgents);
@@ -224,11 +237,6 @@ async function loadMemory() {
 $('#btn-open-vault').addEventListener('click', () => window.aura.memory.openVault());
 
 /* ---------- settings ---------- */
-function fillCoordinatorSelect() {
-  const sel = $('#set-coordinator');
-  sel.innerHTML = state.agents.map(a =>
-    `<option value="${a.id}" ${state.settings.coordinator === a.id ? 'selected' : ''}>${esc(a.name)}${a.available ? '' : ' (—)'}</option>`).join('');
-}
 
 async function loadSettings() {
   state.settings = await window.aura.settings.get();
@@ -238,14 +246,8 @@ async function loadSettings() {
   $('#set-parallel').value = state.settings.maxParallel;
   $('#set-fix').value = state.settings.maxFixRounds;
   $('#set-review').checked = !!state.settings.reviewEnabled;
-  // Pro-версия: умная маршрутизация моделей
-  const routingSection = $('#set-routing-section');
-  if (state.settings.proAvailable) {
-    routingSection.classList.remove('hidden');
-    $('#pro-routing').checked = !!state.settings.proEnabled;
-  } else {
-    routingSection.classList.add('hidden');
-  }
+  // Hermes engine
+  $('#set-hermes').checked = !!state.settings.useHermesEngine;
   $('#set-tg-enabled').checked = !!state.settings.telegramEnabled;
   $('#set-tg-token').value = state.settings.telegramToken || '';
   $('#set-tg-allowed').value = state.settings.telegramAllowed || '';
@@ -282,11 +284,10 @@ $('#btn-save-settings').addEventListener('click', async () => {
   const patch = {
     vaultPath: $('#set-vault').value,
     workspace: $('#set-workspace').value,
-    coordinator: $('#set-coordinator').value,
     maxParallel: parseInt($('#set-parallel').value, 10) || 3,
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,
     reviewEnabled: $('#set-review').checked,
-    proEnabled: state.settings.proAvailable ? $('#pro-routing').checked : false,
+    useHermesEngine: $('#set-hermes').checked,
     telegramEnabled: $('#set-tg-enabled').checked,
     telegramToken: $('#set-tg-token').value.trim(),
     telegramAllowed: $('#set-tg-allowed').value.trim(),
@@ -299,6 +300,53 @@ $('#btn-save-settings').addEventListener('click', async () => {
   renderTasks();
   $('#settings-saved').textContent = t('saved');
   setTimeout(() => { $('#settings-saved').textContent = ''; }, 2000);
+});
+
+/* ---------- Hermes engine panel ---------- */
+async function loadHermesPanel() {
+  $('#hermes-skills').innerHTML = '<div class="hermes-loading">' + esc(t('hermes_loading')) + '</div>';
+  $('#hermes-cron').innerHTML = '<div class="hermes-loading">' + esc(t('hermes_loading')) + '</div>';
+  $('#hermes-mcp').innerHTML = '<div class="hermes-loading">' + esc(t('hermes_loading')) + '</div>';
+  // Загружаем активную вкладку
+  const activeTab = document.querySelector('.hermes-tab.active');
+  if (activeTab) loadHermesData(activeTab.dataset.hermesTab);
+}
+
+async function loadHermesData(tab) {
+  const panel = $('#hermes-' + tab);
+  if (!panel) return;
+  panel.innerHTML = '<div class="hermes-loading">' + esc(t('hermes_loading')) + '</div>';
+
+  let result;
+  if (tab === 'skills') result = await window.aura.hermesExec({ cmd: 'skills', args: ['list'] });
+  else if (tab === 'cron') result = await window.aura.hermesExec({ cmd: 'cron', args: ['list'] });
+  else if (tab === 'mcp') result = await window.aura.hermesExec({ cmd: 'mcp', args: ['list'] });
+
+  if (!result || !result.ok) {
+    panel.innerHTML = '<div class="hermes-error">' + esc(result ? result.output : 'Failed to connect to Hermes') + '</div>';
+    return;
+  }
+
+  panel.innerHTML = '<pre class="hermes-output">' + esc(result.output) + '</pre>';
+}
+
+$('#btn-refresh-hermes').addEventListener('click', () => {
+  const activeTab = document.querySelector('.hermes-tab.active');
+  if (activeTab) loadHermesData(activeTab.dataset.hermesTab);
+});
+
+$('#btn-hermes-sync').addEventListener('click', async () => {
+  const btn = $('#btn-hermes-sync');
+  btn.disabled = true;
+  btn.textContent = '[···] ' + t('hermes_sync');
+  const result = await window.aura.hermesSyncToObsidian();
+  if (result.ok) {
+    btn.textContent = '✓ ' + result.count + ' ' + t('hermes_sync');
+    setTimeout(() => { btn.textContent = t('hermes_sync'); btn.disabled = false; }, 3000);
+  } else {
+    btn.textContent = '✗ ' + (result.error || 'error');
+    setTimeout(() => { btn.textContent = t('hermes_sync'); btn.disabled = false; }, 3000);
+  }
 });
 
 /* ---------- init ---------- */

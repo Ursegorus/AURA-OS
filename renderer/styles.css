@@ -275,5 +275,65 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 .tg-status.ok { color: var(--ok); }
 .tg-status.err { color: var(--err); }
 
+/* Hermes engine panel */
+.hermes-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.hermes-section h3 { font-size: 15px; margin-bottom: 6px; }
+.hermes-section .hint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.hermes-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.hermes-tab {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+}
+.hermes-tab.active {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+.hermes-panel {
+  display: none;
+}
+.hermes-panel.active {
+  display: block;
+}
+.hermes-loading {
+  color: var(--muted);
+  font-style: italic;
+  padding: 20px 0;
+}
+.hermes-error {
+  color: var(--err);
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+.hermes-output {
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* utility */
 .hidden { display: none !important; }

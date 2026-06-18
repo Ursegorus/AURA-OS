@@ -1,50 +1,44 @@
 /**
  * AURA OS — Orchestrator.
- * Pipeline: PLAN (coordinator agent decomposes the task into subtasks)
- *        -> EXECUTE (subtasks run on assigned agents, in parallel when independent)
- *        -> REVIEW/FIX loop (reviewer agent checks results, executor fixes)
- *        -> MEMORY (run is persisted to the Obsidian vault).
+ *
+ * Два режима:
+ *   1. Hermes engine (новый) — вся оркестрация через `hermes chat -q`.
+ *      Hermes сам планирует, распределяет по CLI-агентам, ревьюит,
+ *      фиксит и возвращает результат. AURA OS — GUI + Obsidian + Telegram.
+ *
+ *   2. Классический (старый) — AURA сама запускает CLI-агенты через
+ *      child_process (PLAN→EXECUTE→REVIEW). Оставлен для обратной
+ *      совместимости и работы без установленного Hermes.
  */
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 
 let seq = 0;
 const nextId = (p) => p + '-' + (++seq) + '-' + Date.now().toString(36);
+const IS_WIN = process.platform === 'win32';
 
-class Orchestrator {
-  /**
-   * @param {AgentManager} agents
-   * @param {Memory} memory
-   * @param {object} store settings store
-   * @param {(event: object) => void} emit  renderer event sink
-   * @param {object|null} pro  Pro-модуль (опционально)
-   */
-  constructor(agents, memory, store, emit, pro) {
+// ============================================================
+//  КЛАССИЧЕСКИЙ ОРКЕСТРАТОР (legacy, когда Hermes не установлен)
+// ============================================================
+
+class LegacyOrchestrator {
+  constructor(agents, memory, store, emit) {
     this.agents = agents;
     this.memory = memory;
     this.store = store;
     this.emit = emit;
-    this.pro = pro || null;
     this.tasks = new Map();
   }
 
   settings() {
     return {
-      coordinator: this.store.get('coordinator', 'claude-code'),
       maxParallel: this.store.get('maxParallel', 3),
       maxFixRounds: this.store.get('maxFixRounds', 2),
       workspace: this.store.get('workspace', ''),
       reviewEnabled: this.store.get('reviewEnabled', true),
       trustedDirs: this.store.get('trustedDirs', [])
     };
-  }
-
-  /** Route model via Pro-модуль (если установлен). */
-  _routeModel(agent, complexity) {
-    if (!this.pro || !agent) return undefined;
-    const routing = this.store.get('smartRouting', false);
-    if (!routing) return undefined;
-    return this.pro.routeModel(agent, complexity);
   }
 
   workspaceDir() {
@@ -55,8 +49,6 @@ class Orchestrator {
     if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
     return ws;
   }
-
-  // ---------- PLANNING ----------
 
   planningPrompt(input, available) {
     const agentList = available.map(a =>
@@ -85,7 +77,6 @@ class Orchestrator {
   }
 
   parsePlan(text, available) {
-    // extract the first JSON array from the model output
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return null;
     let arr;
@@ -125,8 +116,6 @@ class Orchestrator {
     return plan;
   }
 
-  // ---------- EXECUTION ----------
-
   async startTask(input) {
     const availability = await this.agents.detectAll();
     const available = this.agents.getAgents().filter(a =>
@@ -161,14 +150,13 @@ class Orchestrator {
 
     // 1) PLAN
     let plan = null;
-    const coordinator = available.find(a => a.id === s.coordinator) ||
-      available.find(a => a.roles.includes('coordinator')) || available[0];
-    this.emit({ type: 'log', taskId: task.id, agent: coordinator.id, text: '[AURA] Планирование через ' + coordinator.name + '…\n' });
+    const lead = available[0];
+    this.emit({ type: 'log', taskId: task.id, agent: lead.id, text: '[AURA] Планирование через ' + lead.name + '…\n' });
 
-    if (available.length > 1 || coordinator) {
-      const res = await this.agents.run(coordinator.id, this.planningPrompt(task.input, available), {
+    if (available.length > 1) {
+      const res = await this.agents.run(lead.id, this.planningPrompt(task.input, available), {
         cwd, runId: task.id + ':plan', addDirs: s.trustedDirs,
-        onData: t => this.emit({ type: 'log', taskId: task.id, agent: coordinator.id, text: t })
+        onData: t => this.emit({ type: 'log', taskId: task.id, agent: lead.id, text: t })
       });
       if (res.ok) plan = this.parsePlan(res.output, available);
     }
@@ -180,23 +168,12 @@ class Orchestrator {
     task.status = 'running';
     this.emit({ type: 'task-updated', task: this.publicTask(task) });
 
-    // 2) EXECUTE with dependency-aware parallelism
+    // 2) EXECUTE
     await this.executePlan(task, cwd, s.maxParallel);
-
-    // 3) REVIEW / FIX loop
+    // 3) REVIEW / FIX
     if (s.reviewEnabled) await this.reviewLoop(task, cwd, s.maxFixRounds);
-
     // 4) FINISH + MEMORY
-    const failed = task.subtasks.some(st => st.status === 'failed');
-    task.status = failed ? 'completed-with-errors' : 'completed';
-    task.summary = this.buildSummary(task);
-    try {
-      const note = this.memory.saveTaskNote(task);
-      if (note) this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Результат сохранён в память Obsidian: ' + note + '\n' });
-    } catch (e) {
-      this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Не удалось записать в Obsidian: ' + e.message + '\n' });
-    }
-    this.emit({ type: 'task-updated', task: this.publicTask(task) });
+    await this.finishTask(task);
   }
 
   async executePlan(task, cwd, maxParallel) {
@@ -210,7 +187,6 @@ class Orchestrator {
     );
 
     while (done.size + task.subtasks.filter(s => s.status === 'failed').length < task.subtasks.length) {
-      // deadlock guard: unmet deps on failed subtasks
       const pending = task.subtasks.filter(st => st.status === 'pending' && !inFlight.has(st.id));
       const startable = ready();
       if (startable.length === 0 && inFlight.size === 0) {
@@ -226,13 +202,8 @@ class Orchestrator {
           .map(d => `Результат шага «${d.title}» (${d.agentName}):\n${(d.output || '').slice(-3000)}`)
           .join('\n\n');
         const prompt = depContext ? depContext + '\n\n---\n\n' + st.prompt : st.prompt;
-        const model = this._routeModel(this.agents.getAgent(st.agent), st.complexity);
-        if (model) {
-          st.model = model;
-          this.emit({ type: 'log', taskId: task.id, agent: st.agent, subtask: st.id, text: `[AURA] Модель для «${st.title}» (${st.complexity}): ${model}\n` });
-        }
         const p = this.agents.run(st.agent, prompt, {
-          cwd, runId: task.id + ':' + st.id, model, addDirs: this.settings().trustedDirs,
+          cwd, runId: task.id + ':' + st.id,
           onData: t => this.emit({ type: 'log', taskId: task.id, agent: st.agent, subtask: st.id, text: t })
         }).then(res => {
           st.output = res.output;
@@ -266,14 +237,12 @@ class Orchestrator {
           agent: fixer, agentName: fixerAgent ? fixerAgent.name : fixer, role: 'coder',
           complexity: fixComplexity, prompt: '', dependsOn: [], status: 'running', output: ''
         };
-        const fixModel = this._routeModel(fixerAgent, fixComplexity);
-        if (fixModel) fixSt.model = fixModel;
         task.subtasks.push(fixSt);
         this.emit({ type: 'task-updated', task: this.publicTask(task) });
 
         const fixRes = await this.agents.run(fixer,
           `Ревьюер нашёл проблемы в работе по задаче: "${task.input}".\n\nЗамечания ревьюера:\n${verdict.slice(-4000)}\n\nИсправь все перечисленные проблемы в файлах текущей директории. После исправления кратко перечисли, что изменил.`,
-          { cwd, runId: task.id + ':' + fixSt.id, model: fixModel, addDirs: this.settings().trustedDirs, onData: t => this.emit({ type: 'log', taskId: task.id, agent: fixer, subtask: fixSt.id, text: t }) });
+          { cwd, runId: task.id + ':' + fixSt.id });
         fixSt.output = fixRes.output;
         fixSt.status = fixRes.ok ? 'done' : 'failed';
         this.emit({ type: 'task-updated', task: this.publicTask(task) });
@@ -281,11 +250,24 @@ class Orchestrator {
 
         const reRes = await this.agents.run(review.agent,
           `Повторно проверь работу в текущей директории по задаче: "${task.input}". Если всё корректно — ответь строкой APPROVED. Иначе перечисли оставшиеся проблемы.`,
-          { cwd, runId: task.id + ':' + review.id + '-re' + round, model: this._routeModel(this.agents.getAgent(review.agent), review.complexity || 'standard'), addDirs: this.settings().trustedDirs, onData: t => this.emit({ type: 'log', taskId: task.id, agent: review.agent, subtask: review.id, text: t }) });
+          { cwd, runId: task.id + ':' + review.id + '-re' + round });
         verdict = reRes.ok ? reRes.output : '';
         review.output += '\n\n--- Повторное ревью (раунд ' + round + ') ---\n' + reRes.output;
       }
     }
+  }
+
+  async finishTask(task) {
+    const failed = task.subtasks.some(st => st.status === 'failed');
+    task.status = failed ? 'completed-with-errors' : 'completed';
+    task.summary = this.buildSummary(task);
+    try {
+      const note = this.memory.saveTaskNote(task);
+      if (note) this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Результат сохранён в память Obsidian: ' + note + '\n' });
+    } catch (e) {
+      this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Не удалось записать в Obsidian: ' + e.message + '\n' });
+    }
+    this.emit({ type: 'task-updated', task: this.publicTask(task) });
   }
 
   buildSummary(task) {
@@ -324,4 +306,241 @@ class Orchestrator {
   }
 }
 
-module.exports = { Orchestrator };
+// ============================================================
+//  HERMES ENGINE — ВСЯ ОРКЕСТРАЦИЯ ЧЕРЕЗ HERMES CLI
+// ============================================================
+
+class HermesEngine {
+  constructor(agents, memory, store, emit) {
+    this.agents = agents;
+    this.memory = memory;
+    this.store = store;
+    this.emit = emit;
+    this.tasks = new Map();
+    this._running = new Map(); // taskId -> child process
+  }
+
+  settings() {
+    return {
+      workspace: this.store.get('workspace', ''),
+      coordinator: this.store.get('coordinator', 'claude-code'),
+      maxParallel: this.store.get('maxParallel', 3)
+    };
+  }
+
+  workspaceDir() {
+    let ws = this.settings().workspace;
+    if (!ws) {
+      ws = path.join(require('os').homedir(), 'AURA-Workspace');
+    }
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    return ws;
+  }
+
+  async startTask(input) {
+    const taskId = nextId('hermes-task');
+    const cwd = this.workspaceDir();
+    const task = {
+      id: taskId, input, title: input.slice(0, 60), status: 'running',
+      subtasks: [], startedAt: Date.now(), summary: '',
+      output: '', engine: 'hermes'
+    };
+    this.tasks.set(taskId, task);
+    this.emit({ type: 'task-created', task: this.publicTask(task) });
+    this.emit({ type: 'log', taskId, agent: 'hermes', text: `[AURA] Запуск через Hermes engine…\n` });
+
+    // Собираем промпт для Hermes
+    // Навык aura-os-orchestrator уже загружен в профиле, так что
+    // Hermes сам знает, как оркестрировать CLI-агенты.
+    const prompt = [
+      `Задача от AURA OS: ${input}`,
+      `Рабочая директория (ВСЕ файлы создавай ТОЛЬКО здесь): ${cwd}`,
+      '',
+      'Координатор: hermes',
+      `Макс. параллельных: ${this.settings().maxParallel}`,
+      '',
+      'ВАЖНО: Все файлы, папки, артефакты — строго внутри рабочей директории. Не создавай ничего вне её.',
+      'Используй навыки claude-code, codex, opencode для запуска агентов.',
+      'Пиши на русском.',
+      'В конце ответа добавь строку: [AURA_DONE]',
+      'После этой строки напиши краткий JSON-отчёт:',
+      '{"status":"completed|failed","summary":"краткий итог","files_changed":["файл1","файл2"]}'
+    ].join('\n');
+
+    const hermesPath = 'hermes';
+    const args = [
+      '-p', 'aura-os',
+      'chat', '-q', prompt,
+      '--skills', 'aura-os-orchestrator,claude-code,codex,opencode',
+      '--yolo', '-Q'
+    ];
+
+    // Экранируем аргументы для shell (требуется на Windows для .cmd файлов)
+    const escaped = args.map(a => {
+      const s = String(a);
+      return /[ "']/.test(s) ? '"' + s.replace(/"/g, '\\"') + '"' : s;
+    });
+
+    const child = IS_WIN
+      ? spawn('cmd.exe', ['/c', hermesPath, ...escaped], {
+          cwd, windowsHide: true,
+          env: { ...process.env, NO_COLOR: '1', TERM: 'dumb' }
+        })
+      : spawn(hermesPath, args, {
+          cwd, windowsHide: true,
+          env: { ...process.env, NO_COLOR: '1', TERM: 'dumb' }
+        });
+
+    this._running.set(taskId, child);
+
+    let output = '';
+    const handleData = (data) => {
+      const text = data.toString();
+      output += text;
+      task.output = output;
+      this.emit({ type: 'log', taskId, agent: 'hermes', text });
+    };
+    child.stdout.on('data', handleData);
+    child.stderr.on('data', handleData);
+
+    return new Promise((resolve) => {
+      child.on('error', (err) => {
+        task.status = 'failed';
+        task.summary = 'Hermes engine error: ' + err.message;
+        this.emit({ type: 'log', taskId, agent: 'hermes', text: `\n[AURA] Ошибка: ${err.message}\n` });
+        this.finishTask(task);
+        resolve(taskId);
+      });
+      child.on('close', (code) => {
+        this._running.delete(taskId);
+        // Парсим JSON-отчёт из конца вывода
+        const doneIdx = output.lastIndexOf('[AURA_DONE]');
+        if (doneIdx >= 0) {
+          const jsonPart = output.slice(doneIdx + 11).trim();
+          try {
+            const report = JSON.parse(jsonPart);
+            task.status = report.status === 'completed' ? 'completed' : 'completed-with-errors';
+            task.summary = report.summary || task.summary;
+          } catch (_) {
+            // JSON не распарсился — используем plain text
+            task.status = code === 0 ? 'completed' : 'failed';
+          }
+        } else {
+          task.status = code === 0 ? 'completed' : 'failed';
+        }
+        if (!task.summary) {
+          task.summary = output.slice(-500).trim();
+        }
+        this.finishTask(task);
+        resolve(taskId);
+      });
+    });
+  }
+
+  finishTask(task) {
+    // Сохраняем в Obsidian (как и раньше)
+    let notePath = null;
+    try {
+      const note = this.memory.saveTaskNote({
+        id: task.id,
+        input: task.input,
+        title: task.title,
+        status: task.status,
+        summary: task.summary,
+        subtasks: [{ title: 'Hermes оркестрация', agent: 'Hermes Agent', agentName: 'Hermes Agent', role: 'coordinator', output: task.output }]
+      });
+      if (note) {
+        notePath = note;
+        this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Результат сохранён в память Obsidian: ' + note + '\n' });
+      }
+    } catch (e) {
+      this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Не удалось записать в Obsidian: ' + e.message + '\n' });
+    }
+
+    // Синхронизируем с Hermes memory (fire-and-forget)
+    if (task.summary) {
+      this._syncToHermesMemory(task, notePath).catch(() => {});
+    }
+
+    this.emit({ type: 'task-updated', task: this.publicTask(task) });
+  }
+
+  /** Отправить результат задачи в Hermes memory. */
+  async _syncToHermesMemory(task, notePath) {
+    const { spawn } = require('child_process');
+    const prompt = [
+      'AURA OS: задача завершена.',
+      `Задача: ${task.input}`,
+      `Статус: ${task.status}`,
+      `Итог: ${(task.summary || '').slice(0, 2000)}`,
+      notePath ? `Заметка Obsidian: ${notePath}` : ''
+    ].filter(Boolean).join('\n');
+
+    const fullArgs = ['-p', 'aura-os', 'chat', '-q',
+      `Сохрани в память: ${prompt}`,
+      '--yolo', '-Q'
+    ];
+    const child = IS_WIN
+      ? spawn('cmd.exe', ['/c', 'hermes', ...fullArgs], { windowsHide: true })
+      : spawn('hermes', fullArgs, { windowsHide: true });
+
+    // Не ждём — fire-and-forget
+    let out = '';
+    child.stdout.on('data', d => { out += d; });
+    child.on('close', () => {
+      this.emit({ type: 'log', taskId: task.id, agent: 'hermes', text: '\n[AURA] Память синхронизирована с Hermes.\n' });
+    });
+  }
+
+  cancelTask(taskId) {
+    const child = this._running.get(taskId);
+    if (child) { try { child.kill(); } catch (_) {} this._running.delete(taskId); }
+    const task = this.tasks.get(taskId);
+    if (task) {
+      task.status = 'cancelled';
+      this.emit({ type: 'task-updated', task: this.publicTask(task) });
+      return true;
+    }
+    return false;
+  }
+
+  publicTask(task) {
+    return {
+      id: task.id, input: task.input, title: task.title, status: task.status,
+      startedAt: task.startedAt, summary: task.summary, engine: task.engine,
+      subtasks: task.subtasks
+    };
+  }
+
+  listTasks() {
+    return Array.from(this.tasks.values()).reverse();
+  }
+}
+
+// ============================================================
+//  ФАБРИКА — выбирает движок в зависимости от настроек
+// ============================================================
+
+class Orchestrator {
+  constructor(agents, memory, store, emit) {
+    this.agents = agents;
+    this.memory = memory;
+    this.store = store;
+    this.emit = emit;
+    this._legacy = new LegacyOrchestrator(agents, memory, store, emit);
+    this._hermes = new HermesEngine(agents, memory, store, emit);
+  }
+
+  _engine() {
+    const useHermes = this.store.get('useHermesEngine', false);
+    return useHermes ? this._hermes : this._legacy;
+  }
+
+  startTask(input) { return this._engine().startTask(input); }
+  cancelTask(id) { return this._engine().cancelTask(id); }
+  listTasks() { return this._engine().listTasks(); }
+  settings() { return this._engine().settings(); }
+  workspaceDir() { return this._engine().workspaceDir(); }
+}
+
+module.exports = { Orchestrator, LegacyOrchestrator, HermesEngine };

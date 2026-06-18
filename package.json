@@ -1,7 +1,7 @@
 {
   "name": "aura-os",
   "productName": "AURA OS",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AURA OS — Agentic Unified Runtime Architecture. A desktop orchestration layer for AI agents (Claude Code, Codex, Gemini, Hermes, local LLMs) with Obsidian shared memory and a built-in Telegram remote terminal.",
   "main": "main.js",
   "author": "AURA OS",
@@ -94,7 +94,6 @@
     }
   },
   "dependencies": {
-    "aura-pro": "git+https://github.com/Ursegorus/aura-pro.git",
     "electron-download": "^4.1.1"
   }
 }

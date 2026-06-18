@@ -36,5 +36,7 @@ contextBridge.exposeInMainWorld('aura', {
     onStatus: (cb) => ipcRenderer.on('telegram-status', (_e, data) => cb(data))
   },
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
-  onEvent: (cb) => ipcRenderer.on('aura-event', (_e, data) => cb(data))
+  onEvent: (cb) => ipcRenderer.on('aura-event', (_e, data) => cb(data)),
+  hermesExec: (opts) => ipcRenderer.invoke('hermes:exec', opts),
+  hermesSyncToObsidian: () => ipcRenderer.invoke('hermes:syncToObsidian')
 });

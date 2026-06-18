@@ -36,6 +36,7 @@
         <button class="nav-btn active" data-view="dashboard"><span class="ico">◈</span><span data-i18n="nav_dashboard"></span></button>
         <button class="nav-btn" data-view="agents"><span class="ico">⬡</span><span data-i18n="nav_agents"></span><span id="agent-count" class="badge"></span></button>
         <button class="nav-btn" data-view="memory"><span class="ico">◎</span><span data-i18n="nav_memory"></span></button>
+        <button class="nav-btn" data-view="hermes"><span class="ico">H</span><span data-i18n="nav_hermes"></span></button>
         <button class="nav-btn" data-view="settings"><span class="ico">⚙</span><span data-i18n="nav_settings"></span></button>
       </nav>
       <div class="sidebar-footer">v1.0.0</div>
@@ -79,6 +80,31 @@
         </div>
       </section>
 
+      <!-- HERMES ENGINE -->
+      <section id="view-hermes" class="view">
+        <div class="view-head">
+          <h2>Hermes Engine</h2>
+          <div>
+            <button id="btn-hermes-sync" class="btn ghost" data-i18n="hermes_sync"></button>
+            <button id="btn-refresh-hermes" class="btn ghost" data-i18n="hermes_refresh"></button>
+          </div>
+        </div>
+        <div class="hermes-tabs">
+          <button class="hermes-tab active" data-hermes-tab="skills">Skills</button>
+          <button class="hermes-tab" data-hermes-tab="cron">Cron</button>
+          <button class="hermes-tab" data-hermes-tab="mcp">MCP</button>
+        </div>
+        <div id="hermes-skills" class="hermes-panel active">
+          <div class="hermes-loading" data-i18n="hermes_loading"></div>
+        </div>
+        <div id="hermes-cron" class="hermes-panel">
+          <div class="hermes-loading" data-i18n="hermes_loading"></div>
+        </div>
+        <div id="hermes-mcp" class="hermes-panel">
+          <div class="hermes-loading" data-i18n="hermes_loading"></div>
+        </div>
+      </section>
+
       <!-- SETTINGS -->
       <section id="view-settings" class="view">
         <div class="view-head"><h2 data-i18n="settings_title"></h2></div>
@@ -88,9 +114,6 @@
 
           <label data-i18n="set_workspace"></label>
           <div class="row"><input id="set-workspace" type="text" readonly /><button class="btn ghost" id="pick-workspace" data-i18n="set_pick"></button></div>
-
-          <label data-i18n="set_coordinator"></label>
-          <select id="set-coordinator"></select>
 
           <div class="row gap">
             <div class="col">
@@ -105,9 +128,10 @@
 
           <label class="check"><input id="set-review" type="checkbox" /> <span data-i18n="set_review"></span></label>
 
-          <div id="set-routing-section">
-            <label class="check"><input id="pro-routing" type="checkbox" /> <span data-i18n="set_routing"></span></label>
-            <p class="hint" data-i18n="set_routing_hint"></p>
+          <div class="hermes-section">
+            <h3>Hermes AI engine</h3>
+            <p class="hint" data-i18n="hermes_hint"></p>
+            <label class="check"><input id="set-hermes" type="checkbox" /> <span data-i18n="hermes_enable"></span></label>
           </div>
 
           <div class="tg-section">
