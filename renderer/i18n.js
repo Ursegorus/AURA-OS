@@ -68,7 +68,18 @@ const I18N = {
     nav_hermes: 'Hermes',
     hermes_refresh: 'Обновить',
     hermes_loading: 'Загрузка…',
-    hermes_sync: 'Синхр. память'
+    hermes_sync: 'Синхр. память',
+    shop_title: 'Магазин скиллов',
+    shop_all: 'Все',
+    shop_official: 'Официальные',
+    shop_skills_sh: 'skills.sh',
+    shop_github: 'GitHub',
+    shop_well_known: 'Well-known',
+    shop_lobehub: 'LobeHub',
+    shop_inspect: 'Описание',
+    shop_install: 'Установить',
+    shop_loading: 'Загрузка…',
+    shop_empty: 'Ничего не найдено'
   },
   en: {
     nav_dashboard: 'Tasks',
@@ -138,7 +149,18 @@ const I18N = {
     nav_hermes: 'Hermes',
     hermes_refresh: 'Refresh',
     hermes_loading: 'Loading…',
-    hermes_sync: 'Sync memory'
+    hermes_sync: 'Sync memory',
+    shop_title: 'Skills Shop',
+    shop_all: 'All',
+    shop_official: 'Official',
+    shop_skills_sh: 'skills.sh',
+    shop_github: 'GitHub',
+    shop_well_known: 'Well-known',
+    shop_lobehub: 'LobeHub',
+    shop_inspect: 'Details',
+    shop_install: 'Install',
+    shop_loading: 'Loading…',
+    shop_empty: 'Nothing found'
   }
 };
 let LANG = 'ru';

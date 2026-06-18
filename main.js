@@ -105,6 +105,7 @@ ipcMain.handle('task:cancel', (_e, id) => orchestrator.cancelTask(id));
 ipcMain.handle('task:list', () => orchestrator.listTasks());
 
 ipcMain.handle('settings:get', () => ({
+  version: require('./package.json').version,
   vaultPath: store.get('vaultPath', ''),
   workspace: store.get('workspace', ''),
   maxParallel: store.get('maxParallel', 3),

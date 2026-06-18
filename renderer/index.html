@@ -39,7 +39,7 @@
         <button class="nav-btn" data-view="hermes"><span class="ico">H</span><span data-i18n="nav_hermes"></span></button>
         <button class="nav-btn" data-view="settings"><span class="ico">⚙</span><span data-i18n="nav_settings"></span></button>
       </nav>
-      <div class="sidebar-footer">v1.0.0</div>
+      <div class="sidebar-footer" id="sidebar-version">v1.0.0</div>
     </aside>
 
     <!-- Main -->
@@ -93,7 +93,7 @@
           <button class="hermes-tab active" data-hermes-tab="skills">Skills</button>
           <button class="hermes-tab" data-hermes-tab="cron">Cron</button>
           <button class="hermes-tab" data-hermes-tab="mcp">MCP</button>
-          <button class="hermes-tab" data-hermes-tab="shop">🧩 Магазин</button>
+          <button class="hermes-tab" data-hermes-tab="shop"><span data-i18n="shop_title"></span></button>
         </div>
         <div id="hermes-skills" class="hermes-panel active">
           <div class="hermes-loading" data-i18n="hermes_loading"></div>
@@ -106,16 +106,14 @@
         </div>
         <div id="hermes-shop" class="hermes-panel">
           <div class="shop-bar">
-            <input id="shop-query" type="text" placeholder="🔍 Поиск скиллов…" />
             <select id="shop-source">
-              <option value="all">Все источники</option>
-              <option value="official">Официальные</option>
-              <option value="skills-sh">skills.sh</option>
-              <option value="github">GitHub</option>
-              <option value="well-known">Well-known</option>
-              <option value="lobehub">LobeHub</option>
+              <option value="official" data-i18n="shop_official"></option>
+              <option value="skills-sh" data-i18n="shop_skills_sh"></option>
+              <option value="github" data-i18n="shop_github"></option>
+              <option value="well-known" data-i18n="shop_well_known"></option>
+              <option value="lobehub" data-i18n="shop_lobehub"></option>
             </select>
-            <button id="btn-shop-search" class="btn primary">Найти</button>
+            <button id="btn-shop-refresh" class="btn primary" data-i18n="hermes_refresh"></button>
           </div>
           <div id="shop-results" class="shop-results"></div>
         </div>

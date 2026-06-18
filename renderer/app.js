@@ -55,7 +55,10 @@ $$('.hermes-tab').forEach(tab => tab.addEventListener('click', () => {
   tab.classList.add('active');
   const panel = document.getElementById('hermes-' + tab.dataset.hermesTab);
   if (panel) panel.classList.add('active');
-  if (tab.dataset.hermesTab === 'shop') return;
+  if (tab.dataset.hermesTab === 'shop') {
+    if ($('#shop-results').children.length === 0) loadShopResults($('#shop-source').value);
+    return;
+  }
   loadHermesData(tab.dataset.hermesTab);
 }));
 
@@ -351,22 +354,24 @@ $('#btn-hermes-sync').addEventListener('click', async () => {
 });
 
 /* ---------- Skills shop ---------- */
-async function loadShopResults(query, source) {
+async function loadShopResults(source) {
   const panel = $('#shop-results');
-  if (!query) { panel.innerHTML = '<div class="shop-hint">Введите поисковый запрос и нажмите «Найти»</div>'; return; }
-  panel.innerHTML = '<div class="hermes-loading">Поиск…</div>';
+  panel.innerHTML = '<div class="hermes-loading">' + esc(t('shop_loading')) + '</div>';
 
-  const res = await window.aura.skillsSearch({ query, source: source || 'all' });
+  const res = await window.aura.skillsSearch({ query: '', source: source || 'official' });
   if (!res || !res.ok) {
-    panel.innerHTML = '<div class="hermes-error">' + esc(res ? res.output : 'Ошибка поиска') + '</div>';
+    panel.innerHTML = '<div class="hermes-error">' + esc(res ? res.output : 'Failed to connect to Hermes') + '</div>';
     return;
   }
 
   const skills = parseSkillsTable(res.output);
   if (skills.length === 0) {
-    panel.innerHTML = '<div class="shop-hint">Ничего не найдено</div>';
+    panel.innerHTML = '<div class="shop-hint">' + esc(t('shop_empty')) + '</div>';
     return;
   }
+
+  const ins = esc(t('shop_inspect'));
+  const inst = esc(t('shop_install'));
 
   panel.innerHTML = skills.map(s => `
     <div class="shop-card" data-skill-id="${esc(s.id)}">
@@ -376,10 +381,9 @@ async function loadShopResults(query, source) {
       </div>
       <div class="shop-card-desc">${esc(s.description || '—')}</div>
       <div class="shop-card-foot">
-        <span class="shop-card-vendor">${esc(s.vendor || '')}</span>
         <div>
-          <button class="btn ghost shop-inspect" data-id="${esc(s.id)}">Описание</button>
-          <button class="btn primary shop-install" data-id="${esc(s.id)}">Установить</button>
+          <button class="btn ghost shop-inspect" data-id="${esc(s.id)}">${ins}</button>
+          <button class="btn primary shop-install" data-id="${esc(s.id)}">${inst}</button>
         </div>
       </div>
     </div>
@@ -391,7 +395,7 @@ async function loadShopResults(query, source) {
     if (inspect && inspect.ok) {
       alert(inspect.output.slice(0, 3000));
     } else {
-      alert('Ошибка: ' + (inspect ? inspect.output : 'соединение'));
+      alert('Error: ' + (inspect ? inspect.output : 'connection'));
     }
   }));
 
@@ -406,8 +410,8 @@ async function loadShopResults(query, source) {
       b.classList.add('ghost');
     } else {
       b.textContent = '✗';
-      alert('Ошибка: ' + (result ? result.output : 'соединение'));
-      setTimeout(() => { b.textContent = 'Установить'; b.disabled = false; }, 2000);
+      alert('Error: ' + (result ? result.output : 'connection'));
+      setTimeout(() => { b.textContent = inst; b.disabled = false; }, 2000);
     }
   }));
 }
@@ -422,7 +426,7 @@ function parseSkillsTable(output) {
       const name = parts[0];
       const desc = parts[1] || '';
       const source = parts[3] || '—';
-      if (name && name.length < 60 && !name.startsWith('Installed') && !name.startsWith('Skills')) {
+      if (name && name.length < 60 && !name.startsWith('Installed') && !name.startsWith('Skills') && !name.startsWith('Searching')) {
         skills.push({ id: name, name, description: desc, source });
       }
     }
@@ -430,19 +434,19 @@ function parseSkillsTable(output) {
   return skills;
 }
 
-$('#btn-shop-search').addEventListener('click', () => {
-  loadShopResults($('#shop-query').value.trim(), $('#shop-source').value);
+// Инициализация магазина: загружаем скиллы сразу, кнопка обновляет
+$('#btn-shop-refresh').addEventListener('click', () => {
+  loadShopResults($('#shop-source').value);
 });
-$('#shop-query').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    loadShopResults(e.target.value.trim(), $('#shop-source').value);
-  }
+$('#shop-source').addEventListener('change', () => {
+  loadShopResults($('#shop-source').value);
 });
 
 /* ---------- init ---------- */
 (async function init() {
   await loadSettings();
+  // Актуальная версия в sidebar
+  if (state.settings.version) $('#sidebar-version').textContent = 'v' + state.settings.version;
   await loadAgents();
   state.tasks = await window.aura.task.list();
   renderTasks();
