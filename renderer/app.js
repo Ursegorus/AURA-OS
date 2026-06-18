@@ -331,7 +331,48 @@ async function loadHermesData(tab) {
     return;
   }
 
-  panel.innerHTML = '<pre class="hermes-output">' + esc(result.output) + '</pre>';
+  // Skills — карточки, остальное — pre
+  if (tab === 'skills') {
+    const skills = parseInstalledSkills(result.output);
+    if (skills.length === 0) {
+      panel.innerHTML = '<div class="shop-hint">' + esc(t('shop_empty')) + '</div>';
+      return;
+    }
+    panel.innerHTML = skills.map(s => `
+      <div class="shop-card">
+        <div class="shop-card-head">
+          <span class="shop-card-name">${esc(s.name)}</span>
+          <span class="shop-card-source pill ${esc(s.source)}">${esc(s.source)}</span>
+        </div>
+        <div class="shop-card-desc">${esc(s.category || '—')}</div>
+        <div class="shop-card-foot">
+          <span class="pill ${s.status === 'enabled' ? 'completed' : 'failed'}">${esc(s.status)}</span>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    panel.innerHTML = '<pre class="hermes-output">' + esc(result.output) + '</pre>';
+  }
+}
+
+/** Парсит `hermes skills list` в массив { name, category, source, trust, status }. */
+function parseInstalledSkills(output) {
+  const lines = output.split('\n');
+  const skills = [];
+  for (const line of lines) {
+    if (line.includes('─') || line.includes('┌') || line.includes('└') || line.includes('├')) continue;
+    const parts = line.split('│').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 4 && parts[0] !== 'Name') {
+      const name = parts[0];
+      const category = parts[1] || '';
+      const source = parts[2] || '—';
+      const status = parts[4] || '';
+      if (name && name.length < 60 && !name.startsWith('Installed')) {
+        skills.push({ name, category, source, status });
+      }
+    }
+  }
+  return skills;
 }
 
 $('#btn-refresh-hermes').addEventListener('click', () => {
