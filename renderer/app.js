@@ -349,6 +349,96 @@ $('#btn-hermes-sync').addEventListener('click', async () => {
   }
 });
 
+/* ---------- Skills shop ---------- */
+async function loadShopResults(query, source) {
+  const panel = $('#shop-results');
+  if (!query) { panel.innerHTML = '<div class="shop-hint">Введите поисковый запрос и нажмите «Найти»</div>'; return; }
+  panel.innerHTML = '<div class="hermes-loading">Поиск…</div>';
+
+  const res = await window.aura.skillsSearch({ query, source: source || 'all' });
+  if (!res || !res.ok) {
+    panel.innerHTML = '<div class="hermes-error">' + esc(res ? res.output : 'Ошибка поиска') + '</div>';
+    return;
+  }
+
+  const skills = parseSkillsTable(res.output);
+  if (skills.length === 0) {
+    panel.innerHTML = '<div class="shop-hint">Ничего не найдено</div>';
+    return;
+  }
+
+  panel.innerHTML = skills.map(s => `
+    <div class="shop-card" data-skill-id="${esc(s.id)}">
+      <div class="shop-card-head">
+        <span class="shop-card-name">${esc(s.name)}</span>
+        <span class="shop-card-source pill ${esc(s.source)}">${esc(s.source)}</span>
+      </div>
+      <div class="shop-card-desc">${esc(s.description || '—')}</div>
+      <div class="shop-card-foot">
+        <span class="shop-card-vendor">${esc(s.vendor || '')}</span>
+        <div>
+          <button class="btn ghost shop-inspect" data-id="${esc(s.id)}">Описание</button>
+          <button class="btn primary shop-install" data-id="${esc(s.id)}">Установить</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  panel.querySelectorAll('.shop-inspect').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.id;
+    const inspect = await window.aura.skillsInspect(id);
+    if (inspect && inspect.ok) {
+      alert(inspect.output.slice(0, 3000));
+    } else {
+      alert('Ошибка: ' + (inspect ? inspect.output : 'соединение'));
+    }
+  }));
+
+  panel.querySelectorAll('.shop-install').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.id;
+    b.disabled = true;
+    b.textContent = '⏳';
+    const result = await window.aura.skillsInstall(id);
+    if (result && result.ok) {
+      b.textContent = '✅';
+      b.classList.remove('primary');
+      b.classList.add('ghost');
+    } else {
+      b.textContent = '✗';
+      alert('Ошибка: ' + (result ? result.output : 'соединение'));
+      setTimeout(() => { b.textContent = 'Установить'; b.disabled = false; }, 2000);
+    }
+  }));
+}
+
+function parseSkillsTable(output) {
+  const lines = output.split('\n');
+  const skills = [];
+  for (const line of lines) {
+    if (line.includes('─') || line.includes('┌') || line.includes('└') || line.includes('├')) continue;
+    const parts = line.split('│').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 3 && parts[0] !== 'Name') {
+      const name = parts[0];
+      const desc = parts[1] || '';
+      const source = parts[3] || '—';
+      if (name && name.length < 60 && !name.startsWith('Installed') && !name.startsWith('Skills')) {
+        skills.push({ id: name, name, description: desc, source });
+      }
+    }
+  }
+  return skills;
+}
+
+$('#btn-shop-search').addEventListener('click', () => {
+  loadShopResults($('#shop-query').value.trim(), $('#shop-source').value);
+});
+$('#shop-query').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    loadShopResults(e.target.value.trim(), $('#shop-source').value);
+  }
+});
+
 /* ---------- init ---------- */
 (async function init() {
   await loadSettings();

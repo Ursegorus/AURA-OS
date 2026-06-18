@@ -151,6 +151,35 @@ ipcMain.handle('hermes:exec', (_e, { cmd, args: cmdArgs }) => {
   });
 });
 
+// ---------- Skills shop ----------
+ipcMain.handle('skills:search', async (_e, { query, source }) => {
+  const args = ['-p', 'aura-os', 'skills', 'search', query];
+  if (source && source !== 'all') args.push('--source', source);
+  return _hermesExec(args);
+});
+
+ipcMain.handle('skills:inspect', async (_e, id) => {
+  return _hermesExec(['-p', 'aura-os', 'skills', 'inspect', id]);
+});
+
+ipcMain.handle('skills:install', async (_e, id) => {
+  return _hermesExec(['-p', 'aura-os', 'skills', 'install', id]);
+});
+
+/** Helper: run a hermes command and return { ok, output, code }. */
+function _hermesExec(args) {
+  return new Promise((resolve) => {
+    const isWin = process.platform === 'win32';
+    const child = isWin
+      ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', ...args], { windowsHide: true })
+      : require('child_process').spawn('hermes', args, { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', d => { out += d.toString(); });
+    child.stderr.on('data', d => { out += d.toString(); });
+    child.on('close', (code) => resolve({ ok: code === 0, output: out.trim(), code }));
+  });
+}
+
 /** Экспорт сессий Hermes в Obsidian vault. */
 ipcMain.handle('hermes:syncToObsidian', async () => {
   const vault = store.get('vaultPath', '');

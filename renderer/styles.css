@@ -335,5 +335,83 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
   word-break: break-all;
 }
 
+/* Skills shop */
+.shop-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.shop-bar input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--fg);
+  font-size: 14px;
+}
+.shop-bar select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--fg);
+  font-size: 13px;
+}
+.shop-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shop-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  transition: border-color .15s;
+}
+.shop-card:hover { border-color: var(--accent); }
+.shop-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.shop-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg);
+}
+.shop-card-source {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 99px;
+}
+.shop-card-source.builtin { background: rgba(108,140,255,.2); color: #8ab4ff; }
+.shop-card-source.official { background: rgba(157,108,255,.2); color: #c8a8ff; }
+.shop-card-source.community { background: rgba(108,255,140,.15); color: #8affa0; }
+.shop-card-desc {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.shop-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.shop-card-foot > div { display: flex; gap: 6px; }
+.shop-card-vendor {
+  font-size: 11px;
+  color: var(--muted2);
+}
+.shop-hint {
+  color: var(--muted);
+  text-align: center;
+  padding: 40px 0;
+  font-size: 14px;
+}
+
 /* utility */
 .hidden { display: none !important; }

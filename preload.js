@@ -38,5 +38,8 @@ contextBridge.exposeInMainWorld('aura', {
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
   onEvent: (cb) => ipcRenderer.on('aura-event', (_e, data) => cb(data)),
   hermesExec: (opts) => ipcRenderer.invoke('hermes:exec', opts),
-  hermesSyncToObsidian: () => ipcRenderer.invoke('hermes:syncToObsidian')
+  hermesSyncToObsidian: () => ipcRenderer.invoke('hermes:syncToObsidian'),
+  skillsSearch: (opts) => ipcRenderer.invoke('skills:search', opts),
+  skillsInspect: (id) => ipcRenderer.invoke('skills:inspect', id),
+  skillsInstall: (id) => ipcRenderer.invoke('skills:install', id)
 });

@@ -93,6 +93,7 @@
           <button class="hermes-tab active" data-hermes-tab="skills">Skills</button>
           <button class="hermes-tab" data-hermes-tab="cron">Cron</button>
           <button class="hermes-tab" data-hermes-tab="mcp">MCP</button>
+          <button class="hermes-tab" data-hermes-tab="shop">🧩 Магазин</button>
         </div>
         <div id="hermes-skills" class="hermes-panel active">
           <div class="hermes-loading" data-i18n="hermes_loading"></div>
@@ -102,6 +103,21 @@
         </div>
         <div id="hermes-mcp" class="hermes-panel">
           <div class="hermes-loading" data-i18n="hermes_loading"></div>
+        </div>
+        <div id="hermes-shop" class="hermes-panel">
+          <div class="shop-bar">
+            <input id="shop-query" type="text" placeholder="🔍 Поиск скиллов…" />
+            <select id="shop-source">
+              <option value="all">Все источники</option>
+              <option value="official">Официальные</option>
+              <option value="skills-sh">skills.sh</option>
+              <option value="github">GitHub</option>
+              <option value="well-known">Well-known</option>
+              <option value="lobehub">LobeHub</option>
+            </select>
+            <button id="btn-shop-search" class="btn primary">Найти</button>
+          </div>
+          <div id="shop-results" class="shop-results"></div>
         </div>
       </section>
 
