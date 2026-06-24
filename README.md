@@ -1,4 +1,4 @@
-# AURA OS
+# AURA OS — Agentic Unified Runtime Architecture
 
 Скачайте программу, напишите, что нужно сделать — и она выполнит задачу с помощью ИИ.
 
@@ -73,7 +73,7 @@ AURA OS — проект с открытым кодом (MIT).
 
 ## English
 
-**Download, type your task, get the result.** A desktop app that uses AI to complete tasks. No API keys, no terminal, no setup required.
+**AURA OS — Agentic Unified Runtime Architecture.** Download, type your task, get the result. No API keys, no terminal, no setup required.
 
 ### Quick start
 
