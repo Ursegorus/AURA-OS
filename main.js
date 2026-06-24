@@ -28,6 +28,8 @@ let win = null;
 const store = new Store();
 const agents = new AgentManager(store);
 const memory = new Memory(store);
+// Инициализация типовой структуры Second Brain при первом запуске
+memory.initTemplate();
 
 // Fan out orchestrator events to both the UI and the Telegram terminal.
 function dispatchEvent(event) {
@@ -206,6 +208,9 @@ ipcMain.handle('memory:openVault', () => {
 });
 ipcMain.handle('memory:getGraphHTML', () => {
   return memory.getGraphHTML();
+});
+ipcMain.handle('memory:initTemplate', () => {
+  return memory.initTemplate();
 });
 ipcMain.handle('memory:tree', async (_e, dir) => {
   const base = dir || memory.basePath();
