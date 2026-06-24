@@ -182,6 +182,7 @@ ipcMain.handle('settings:get', () => ({
   orchestratorMode: store.get('orchestratorMode', 'auto'),
   hermesAvailable: store.get('_hermesAvailable', false),
   opencodeAvailable: store.get('_opencodeAvailable', false),
+  knowledgePath: store.get('knowledgePath', ''),
   // AI Free
   useAIFree: store.get('useAIFree', false),
   aifreePath: store.get('aifreePath', '')
@@ -202,6 +203,27 @@ ipcMain.handle('memory:list', () => memory.listNotes());
 ipcMain.handle('memory:read', (_e, p) => memory.readNote(p));
 ipcMain.handle('memory:openVault', () => {
   if (memory.isConfigured()) shell.openPath(memory.vaultPath());
+});
+ipcMain.handle('memory:openGraph', async () => {
+  const htmlPath = memory.openGraph();
+  if (htmlPath) shell.openPath(htmlPath);
+  return { ok: !!htmlPath };
+});
+ipcMain.handle('memory:tree', async (_e, dir) => {
+  const base = dir || memory.basePath();
+  function walk(d) { 
+    const entries = [];
+    try {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        if (e.name.startsWith('.') || e.name === 'node_modules') continue;
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) entries.push({ name: e.name, path: full, type: 'dir', children: walk(full) });
+        else if (e.name.endsWith('.md')) entries.push({ name: e.name, path: full, type: 'file' });
+      }
+    } catch (_) {}
+    return entries;
+  }
+  return walk(base);
 });
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));

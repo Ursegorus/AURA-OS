@@ -306,6 +306,7 @@ async function loadSettings() {
     }
   })();
   // Статус OpenCode
+  // Статус OpenCode
   (async () => {
     const el = $('#opencode-status');
     if (!el) return;
@@ -313,7 +314,6 @@ async function loadSettings() {
       el.innerHTML = `<span class="hermes-ok">✅ OpenCode доступен (бесплатные модели)</span>`;
     } else {
       el.innerHTML = `<span class="hermes-err">❌ OpenCode не установлен</span>`;
-      // Если OpenCode не установлен и это режим opencode — предлагаем установить
       if (state.settings.orchestratorMode === 'opencode') {
         el.innerHTML += ` <button class="btn ghost" id="btn-install-opencode-status">⚡ Установить</button>`;
         setTimeout(() => {
@@ -328,6 +328,8 @@ async function loadSettings() {
       }
     }
   })();
+  // Папка базы знаний
+  $('#set-knowledge').value = state.settings.knowledgePath || '';
   // AI Free
   $('#set-aifree').checked = !!state.settings.useAIFree;
   $('#set-tg-enabled').checked = !!state.settings.telegramEnabled;
@@ -354,9 +356,16 @@ function renderTgStatus(s) {
 }
 window.aura.telegram.onStatus(renderTgStatus);
 
+$('#btn-open-vault').addEventListener('click', () => window.aura.memory.openVault());
+$('#btn-open-graph').addEventListener('click', () => window.aura.memory.openGraph());
+
 $('#pick-vault').addEventListener('click', async () => {
   const p = await window.aura.settings.pickFolder('Obsidian vault');
   if (p) $('#set-vault').value = p;
+});
+$('#pick-knowledge').addEventListener('click', async () => {
+  const p = await window.aura.settings.pickFolder('Папка базы знаний');
+  if (p) $('#set-knowledge').value = p;
 });
 $('#pick-workspace').addEventListener('click', async () => {
   const p = await window.aura.settings.pickFolder('Workspace');
@@ -365,6 +374,7 @@ $('#pick-workspace').addEventListener('click', async () => {
 $('#btn-save-settings').addEventListener('click', async () => {
   const patch = {
     vaultPath: $('#set-vault').value,
+    knowledgePath: $('#set-knowledge').value,
     workspace: $('#set-workspace').value,
     maxParallel: parseInt($('#set-parallel').value, 10) || 3,
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,

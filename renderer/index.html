@@ -72,7 +72,10 @@
       <section id="view-memory" class="view">
         <div class="view-head">
           <h2 data-i18n="memory_title"></h2>
-          <button id="btn-open-vault" class="btn ghost" data-i18n="memory_open"></button>
+          <div>
+            <button id="btn-open-graph" class="btn ghost">🕸 Граф</button>
+            <button id="btn-open-vault" class="btn ghost" data-i18n="memory_open"></button>
+          </div>
         </div>
         <div class="memory-layout">
           <div id="memory-list" class="memory-list"></div>
@@ -125,6 +128,9 @@
         <div class="settings-card">
           <label data-i18n="set_vault"></label>
           <div class="row"><input id="set-vault" type="text" readonly /><button class="btn ghost" id="pick-vault" data-i18n="set_pick"></button></div>
+
+          <label>📂 Папка базы знаний (если нет Obsidian)</label>
+          <div class="row"><input id="set-knowledge" type="text" readonly /><button class="btn ghost" id="pick-knowledge" data-i18n="set_pick"></button></div>
 
           <label data-i18n="set_workspace"></label>
           <div class="row"><input id="set-workspace" type="text" readonly /><button class="btn ghost" id="pick-workspace" data-i18n="set_pick"></button></div>
