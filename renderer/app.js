@@ -186,10 +186,10 @@ async function loadAgents() {
     if (btn) {
       btn.addEventListener('click', async function() {
         this.disabled = true;
-        this.textContent = '[···] Установка...';
+        this.textContent = '⋯ Установка...';
         const res = await window.aura.agentsInstall({ command: 'opencode-ai@latest' });
         if (res.ok) {
-          this.textContent = '[OK] Установлено!';
+          this.textContent = '✓ Установлено!'
           setTimeout(() => loadAgents(), 2000);
         } else {
           this.textContent = '✗ Ошибка. Установите Node.js и попробуйте снова.';
@@ -235,7 +235,7 @@ async function loadAgents() {
       setTimeout(() => loadAgents(), 2000);
     } else {
       this.textContent = '✗ Ошибка';
-      setTimeout(() => { this.textContent = '+ Установить'; this.disabled = false; }, 3000);
+      setTimeout(() => { this.textContent = 'Установить'; this.disabled = false; }, 3000);
     }
   }));
 }
@@ -566,7 +566,7 @@ async function loadShopResults(source) {
   panel.querySelectorAll('.shop-install').forEach(b => b.addEventListener('click', async () => {
     const id = b.dataset.id;
     b.disabled = true;
-    b.textContent = '[···]';
+    b.textContent = '⋯';
     const result = await window.aura.skillsInstall(id);
     if (result && result.ok) {
       b.textContent = '[OK]';
