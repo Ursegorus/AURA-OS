@@ -204,10 +204,8 @@ ipcMain.handle('memory:read', (_e, p) => memory.readNote(p));
 ipcMain.handle('memory:openVault', () => {
   if (memory.isConfigured()) shell.openPath(memory.vaultPath());
 });
-ipcMain.handle('memory:openGraph', async () => {
-  const htmlPath = memory.openGraph();
-  if (htmlPath) shell.openPath(htmlPath);
-  return { ok: !!htmlPath };
+ipcMain.handle('memory:getGraphHTML', () => {
+  return memory.getGraphHTML();
 });
 ipcMain.handle('memory:tree', async (_e, dir) => {
   const base = dir || memory.basePath();

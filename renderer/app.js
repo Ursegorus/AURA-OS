@@ -357,7 +357,25 @@ function renderTgStatus(s) {
 window.aura.telegram.onStatus(renderTgStatus);
 
 $('#btn-open-vault').addEventListener('click', () => window.aura.memory.openVault());
-$('#btn-open-graph').addEventListener('click', () => window.aura.memory.openGraph());
+$('#btn-open-graph').addEventListener('click', async function () {
+  const panel = $('#hermes-mcp'); // reuse MCP panel? No, create a graph modal
+  const html = await window.aura.memory.getGraphHTML();
+  // Открываем модальное окно с iframe
+  const existing = document.getElementById('graph-modal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'graph-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;background:#0b0f17;display:flex;flex-direction:column';
+  modal.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:#0f172a;border-bottom:1px solid #1e293b">
+      <span style="color:#e2e8f0;font-weight:600">🕸 Граф знаний</span>
+      <button id="graph-close" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <iframe id="graph-frame" style="flex:1;border:none" sandbox="allow-scripts"></iframe>`;
+  document.body.appendChild(modal);
+  document.getElementById('graph-frame').srcdoc = html;
+  document.getElementById('graph-close').addEventListener('click', () => modal.remove());
+});
 
 $('#pick-vault').addEventListener('click', async () => {
   const p = await window.aura.settings.pickFolder('Obsidian vault');

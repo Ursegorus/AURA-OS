@@ -643,8 +643,115 @@ class OpenCodeEngine {
   }
 }
 
-// ФАБРИКА — выбирает движок по настройке orchestratorMode
+// ============================================================
+//  CLAUDE CODE ENGINE — ОРКЕСТРАЦИЯ ЧЕРЕЗ CLAUDE CODE CLI
+//  Использует встроенные skills, MCP и agent teams Claude Code
+// ============================================================
 
+class ClaudeCodeEngine {
+  constructor(agents, memory, store, emit) {
+    this.agents = agents;
+    this.memory = memory;
+    this.store = store;
+    this.emit = emit;
+    this.tasks = new Map();
+    this._running = new Map();
+  }
+
+  settings() {
+    return { workspace: this.store.get('workspace', '') };
+  }
+
+  workspaceDir() {
+    let ws = this.settings().workspace;
+    if (!ws) ws = path.join(require('os').homedir(), 'AURA-Workspace');
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    return ws;
+  }
+
+  async startTask(input) {
+    const taskId = nextId('claude-task');
+    const cwd = this.workspaceDir();
+    const task = {
+      id: taskId, input, title: input.slice(0, 60), status: 'running',
+      subtasks: [], startedAt: Date.now(), summary: '',
+      output: '', engine: 'claude'
+    };
+    this.tasks.set(taskId, task);
+    this.emit({ type: 'task-created', task: this.publicTask(task) });
+    this.emit({ type: 'log', taskId, agent: 'claude', text: `[AURA] Запуск через Claude Code engine…\n` });
+
+    const vaultCtx = this.memory.searchContext(input, 5);
+
+    const prompt = [
+      `Задача: ${input}`,
+      vaultCtx ? `\nКонтекст из базы знаний:${vaultCtx}` : '',
+      `Рабочая директория: ${cwd}`,
+      'Все файлы создавай ТОЛЬКО в рабочей директории.'
+    ].join('\n');
+
+    // Claude Code в headless режиме — использует свои skills, MCP, CLAUDE.md
+    const args = ['-p', prompt, '--dangerously-skip-permissions', '--allowedTools', 'Read,Edit,Bash,Write', '--max-turns', '15'];
+    const escaped = args.map(a => /[ "']/.test(String(a)) ? '"' + String(a).replace(/"/g, '\\"') + '"' : String(a));
+
+    const child = IS_WIN
+      ? spawn('cmd.exe', ['/c', 'claude', ...escaped], { cwd, windowsHide: true, env: { ...process.env, NO_COLOR: '1', TERM: 'dumb' } })
+      : spawn('claude', args, { cwd, windowsHide: true, env: { ...process.env, NO_COLOR: '1', TERM: 'dumb' } });
+
+    this._running.set(taskId, child);
+
+    let output = '';
+    child.stdout.on('data', d => { const t = d.toString(); output += t; task.output = output; this.emit({ type: 'log', taskId, agent: 'claude', text: t }); });
+    child.stderr.on('data', d => { const t = d.toString(); output += t; task.output = output; this.emit({ type: 'log', taskId, agent: 'claude', text: t }); });
+
+    return new Promise((resolve) => {
+      child.on('error', (err) => {
+        task.status = 'failed';
+        task.summary = 'Claude Code error: ' + err.message;
+        this.finishTask(task); resolve(taskId);
+      });
+      child.on('close', (code) => {
+        this._running.delete(taskId);
+        task.status = code === 0 ? 'completed' : 'failed';
+        task.summary = output.slice(-500).trim();
+        this.finishTask(task); resolve(taskId);
+      });
+    });
+  }
+
+  finishTask(task) {
+    try {
+      const note = this.memory.saveTaskNote({
+        id: task.id, input: task.input, title: task.title,
+        status: task.status, summary: task.summary,
+        subtasks: [{ title: 'Claude Code выполнение', agent: 'claude-code', agentName: 'Claude Code', role: 'coder', output: task.output }]
+      });
+      if (note) this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Результат сохранён в память: ' + note + '\n' });
+    } catch (e) {
+      this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Ошибка сохранения: ' + e.message + '\n' });
+    }
+    this.emit({ type: 'task-updated', task: this.publicTask(task) });
+  }
+
+  cancelTask(taskId) {
+    const child = this._running.get(taskId);
+    if (child) { try { child.kill(); } catch (_) {} this._running.delete(taskId); }
+    const task = this.tasks.get(taskId);
+    if (task) { task.status = 'cancelled'; this.emit({ type: 'task-updated', task: this.publicTask(task) }); return true; }
+    return false;
+  }
+
+  publicTask(task) {
+    return { id: task.id, input: task.input, title: task.title, status: task.status, startedAt: task.startedAt, summary: task.summary, engine: task.engine, subtasks: task.subtasks };
+  }
+
+  listTasks() {
+    return Array.from(this.tasks.values()).reverse();
+  }
+}
+
+// ============================================================
+//  ФАБРИКА — выбирает движок в зависимости от настроек
 // ============================================================
 //  ФАБРИКА — выбирает движок в зависимости от настроек
 // ============================================================
@@ -658,6 +765,7 @@ class Orchestrator {
     this._legacy = new LegacyOrchestrator(agents, memory, store, emit);
     this._hermes = new HermesEngine(agents, memory, store, emit);
     this._opencode = new OpenCodeEngine(agents, memory, store, emit);
+    this._claude = new ClaudeCodeEngine(agents, memory, store, emit);
   }
 
   _engine() {
@@ -708,4 +816,4 @@ class Orchestrator {
   workspaceDir() { return this._engine().workspaceDir(); }
 }
 
-module.exports = { Orchestrator, LegacyOrchestrator, HermesEngine, OpenCodeEngine };
+module.exports = { Orchestrator, LegacyOrchestrator, HermesEngine, OpenCodeEngine, ClaudeCodeEngine };

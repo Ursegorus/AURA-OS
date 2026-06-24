@@ -217,14 +217,15 @@ class Memory {
     } catch (_) { /* graph не критичен */ }
   }
 
-  /** Сгенерировать HTML с vis-network графом и открыть. */
-  openGraph() {
+  /** Сгенерировать HTML с vis-network графом. */
+  getGraphHTML() {
     this.buildGraph();
     const graphPath = path.join(this.auraDir(), 'state', 'graph.json');
-    if (!fs.existsSync(graphPath)) return null;
+    if (!fs.existsSync(graphPath)) return '<p style="color:#666">Нет заметок для графа</p>';
 
     const graph = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
-    // Цвета групп
+    if (!graph.nodes || graph.nodes.length === 0) return '<p style="color:#666">Нет связей между заметками</p>';
+
     const colors = ['#6c8cff','#a78bfa','#22c55e','#f59e0b','#ef4444','#ec4899','#06b6d4','#84cc16'];
     const groupColors = {};
     let ci = 0;
@@ -232,11 +233,11 @@ class Memory {
       if (!groupColors[n.group]) groupColors[n.group] = colors[ci++ % colors.length];
     }
 
-    const html = `<!DOCTYPE html>
-<html lang="ru"><head><meta charset="UTF-8"><title>Граф знаний AURA OS</title>
-<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-<style>body{margin:0;background:#0b0f17;color:#e2e8f0;font-family:Inter,sans-serif}
-#graph{width:100vw;height:100vh}.vis-label{color:#e2e8f0!important}</style></head>
+    return `<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><title>Граф знаний</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"><\/script>
+<style>body{margin:0;background:#0b0f17;color:#e2e8f0;font-family:sans-serif;overflow:hidden}
+#graph{width:100vw;height:100vh}</style></head>
 <body><div id="graph"></div>
 <script>
 const data = ${JSON.stringify(graph)};
@@ -249,17 +250,11 @@ const nodes = new vis.DataSet(data.nodes.map(n => ({
 const edges = new vis.DataSet(data.links.map(l => ({
   from: l.source, to: l.target, color: { color: '#334155', opacity: 0.4 }, width: 1
 })));
-const container = document.getElementById('graph');
-new vis.Network(container, { nodes, edges }, {
+new vis.Network(document.getElementById('graph'), { nodes, edges }, {
   physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.005 } },
-  interaction: { hover: true, tooltipDelay: 200 },
-  edges: { smooth: { type: 'continuous' } }
+  interaction: { hover: true, tooltipDelay: 200 }
 });
-</script></body></html>`;
-
-    const htmlPath = path.join(this.auraDir(), 'state', 'graph.html');
-    fs.writeFileSync(htmlPath, html, 'utf8');
-    return htmlPath;
+<\/script></body></html>`;
   }
 
   _findAllMd(dir) {
