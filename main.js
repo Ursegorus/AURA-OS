@@ -47,6 +47,88 @@ const telegram = new TelegramTerminal({
   onLog: (line) => process.stdout.write(line)
 });
 
+// ---------- Auto-install Node.js и Python если их нет ----------
+const RUNTIME_DIR = path.join(require('os').homedir(), '.aura-runtime');
+
+async function ensureRuntime() {
+  const { spawnSync, execFileSync } = require('child_process');
+  const isWin = process.platform === 'win32';
+  const ext = isWin ? '.exe' : '';
+  const http = require('https');
+  const fs = require('fs');
+
+  // Функция проверки: вернулся ли 0 от команды --version
+  function check(cmd) {
+    try {
+      const r = spawnSync(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', cmd + ' --version 2>&1'], { windowsHide: true, encoding: 'utf8' });
+      return r.status === 0;
+    } catch (_) { return false; }
+  }
+
+  // Функция установки: скачать zip/msi, распаковать, добавить PATH
+  async function install(platform, version, label) {
+    console.log(`[AURA] ${label} не найден — устанавливаю...`);
+    const dir = path.join(RUNTIME_DIR, platform);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const url = platform === 'node'
+      ? `https://nodejs.org/dist/v${version}/node-v${version}-win-x64.zip`
+      : `https://www.python.org/ftp/python/${version}/python-${version}-embed-amd64.zip`;
+
+    const zipPath = path.join(RUNTIME_DIR, `${platform}.zip`);
+    // Скачиваем
+    await new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(zipPath);
+      http.get(url, (res) => {
+        if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
+        res.pipe(file);
+        file.on('finish', () => { file.close(); resolve(); });
+      }).on('error', reject);
+    });
+    // Распаковываем (через powershell Expand-Archive на Windows)
+    const psCmd = `powershell -c "Expand-Archive -Path '${zipPath}' -DestinationPath '${dir}' -Force"`;
+    spawnSync(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', psCmd], { windowsHide: true });
+    fs.unlinkSync(zipPath);
+
+    // Добавляем в PATH для этого процесса
+    const extracted = platform === 'node'
+      ? path.join(dir, `node-v${version}-win-x64`)
+      : dir;
+    process.env.PATH = extracted + path.delimiter + process.env.PATH;
+
+    // Проверка
+    console.log(`[AURA] ${label} установлен: ${extracted}`);
+    return check(platform === 'node' ? 'node' : 'python');
+  }
+
+  // Проверяем Node.js
+  let nodeOk = check('node');
+  if (!nodeOk) {
+    // Пробуем найти в RUNTIME_DIR (возможно установили в прошлый раз)
+    const nodeDir = path.join(RUNTIME_DIR, 'node');
+    if (fs.existsSync(path.join(nodeDir, 'node.exe')) || fs.existsSync(path.join(nodeDir, 'node'))) {
+      process.env.PATH = nodeDir + path.delimiter + process.env.PATH;
+      nodeOk = check('node');
+    }
+  }
+  if (!nodeOk) nodeOk = await install('node', '26.1.0', 'Node.js');
+  if (nodeOk) console.log('[AURA] Node.js ✓');
+
+  // Проверяем Python
+  let pythonOk = check('python') || check('python3');
+  if (!pythonOk) {
+    const pyDir = path.join(RUNTIME_DIR, 'python');
+    if (fs.existsSync(path.join(pyDir, 'python.exe')) || fs.existsSync(path.join(pyDir, 'python'))) {
+      process.env.PATH = pyDir + path.delimiter + process.env.PATH;
+      pythonOk = check('python') || check('python3');
+    }
+  }
+  if (!pythonOk) pythonOk = await install('python', '3.12.3', 'Python');
+  if (pythonOk) console.log('[AURA] Python ✓');
+
+  return { node: nodeOk, python: pythonOk };
+}
+
 // ---------- Auto-install / update Hermes Agent (движок обязателен) ----------
 function ensureHermes() {
   return new Promise(resolve => {
@@ -121,6 +203,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  await ensureRuntime();
   await ensureHermes();
   await orchestrator.detectEngines();
   createWindow();
