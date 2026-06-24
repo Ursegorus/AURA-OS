@@ -79,6 +79,62 @@ async function ensureRuntime() {
     });
   }
 
+  // Fallback portable установка (без прав администратора)
+  async function installPortable(platform, version) {
+    console.log(`[AURA] Пробую portable ${platform}...`);
+    const tmp = path.join(RUNTIME_DIR, 'tmp');
+    if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
+    const targetDir = path.join(RUNTIME_DIR, platform);
+
+    if (platform === 'node') {
+      const isArm = isMac && require('os').arch() === 'arm64';
+      const arch = isWin ? 'win-x64' : (isArm ? 'darwin-arm64' : (isMac ? 'darwin-x64' : 'linux-x64'));
+      const archive = `node-v${version}-${arch}.tar.gz`;
+      const dest = path.join(tmp, archive);
+      await download(`https://nodejs.org/dist/v${version}/${archive}`, dest);
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      run(`tar -xzf "${dest}" -C "${targetDir}" --strip-components=1`);
+      fs.unlinkSync(dest);
+      process.env.PATH = path.join(targetDir, 'bin') + path.delimiter + process.env.PATH;
+    } else {
+      // Python portable
+      if (isWin) {
+        const archive = `python-${version}-embed-amd64.zip`;
+        const dest = path.join(tmp, archive);
+        await download(`https://www.python.org/ftp/python/${version}/${archive}`, dest);
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+        run(`powershell -c "Expand-Archive -Path '${dest}' -DestinationPath '${targetDir}' -Force"`);
+        fs.unlinkSync(dest);
+        process.env.PATH = targetDir + path.delimiter + process.env.PATH;
+      } else {
+        // На Linux/macOS portable python через tar.gz (python-build-standalone)
+        const isArm = isMac && require('os').arch() === 'arm64';
+        const arch = isArm ? 'aarch64' : 'x86_64';
+        const tag = `20250317`; // последний релиз python-build-standalone
+        const archive = `cpython-${version}+${tag}-${arch}-unknown-linux-gnu-install_only.tar.gz`;
+        const url = `https://github.com/astral-sh/python-build-standalone/releases/download/${tag}/${archive}`;
+        const dest = path.join(tmp, archive);
+        await download(url, dest);
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+        run(`tar -xzf "${dest}" -C "${targetDir}" --strip-components=1`);
+        fs.unlinkSync(dest);
+        process.env.PATH = path.join(targetDir, 'bin') + path.delimiter + process.env.PATH;
+      }
+    }
+    return check(platform === 'node' ? 'node' : 'python') || check(platform === 'node' ? 'node' : 'python3');
+  }
+
+  async function tryInstall(label, installerFn) {
+    console.log(`[AURA] ${label} не найден — устанавливаю...`);
+    const ok = await installerFn();
+    if (ok) return ok;
+    // Если не сработало — portable fallback
+    console.log(`[AURA] Установка ${label} не удалась. Пробую portable версию...`);
+    const platform = label.toLowerCase();
+    const version = platform === 'node' ? '26.1.0' : '3.12.3';
+    return await installPortable(platform, version);
+  }
+
   // ─── Node.js ────────────────────────────────────────────
   let nodeOk = check('node');
   if (!nodeOk) {
@@ -89,34 +145,30 @@ async function ensureRuntime() {
     }
   }
   if (!nodeOk) {
-    console.log('[AURA] Node.js не найден — устанавливаю...');
-    const tmp = path.join(RUNTIME_DIR, 'tmp');
-    if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
-
-    if (isWin) {
-      // Windows: MSI
-      const installer = path.join(tmp, 'node-v26.1.0-x64.msi');
-      await download('https://nodejs.org/dist/v26.1.0/node-v26.1.0-x64.msi', installer);
-      run(`msiexec /i "${installer}" /quiet /norestart`);
-      await new Promise(r => setTimeout(r, 30000));
-      fs.unlinkSync(installer);
-    } else if (isMac) {
-      // macOS: официальный .pkg установщик
-      let arch = require('os').arch() === 'arm64' ? 'arm64' : 'x64';
-      const pkg = `node-v26.1.0-${arch}.pkg`;
-      const dest = path.join(tmp, pkg);
-      await download(`https://nodejs.org/dist/v26.1.0/${pkg}`, dest);
-      run(`sudo installer -pkg "${dest}" -target /`);
-      await new Promise(r => setTimeout(r, 20000));
-      fs.unlinkSync(dest);
-    } else {
-      // Linux: через NodeSource + apt
-      console.log('[AURA] Устанавливаю Node.js через NodeSource...');
-      run('curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -');
-      run('sudo apt-get install -y nodejs 2>&1');
-      await new Promise(r => setTimeout(r, 20000));
-    }
-    nodeOk = check('node');
+    nodeOk = await tryInstall('Node', async () => {
+      const tmp = path.join(RUNTIME_DIR, 'tmp');
+      if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
+      if (isWin) {
+        const installer = path.join(tmp, 'node-v26.1.0-x64.msi');
+        await download('https://nodejs.org/dist/v26.1.0/node-v26.1.0-x64.msi', installer);
+        run(`msiexec /i "${installer}" /quiet /norestart`);
+        await new Promise(r => setTimeout(r, 30000));
+        fs.unlinkSync(installer);
+      } else if (isMac) {
+        const arch = require('os').arch() === 'arm64' ? 'arm64' : 'x64';
+        const pkg = `node-v26.1.0-${arch}.pkg`;
+        const dest = path.join(tmp, pkg);
+        await download(`https://nodejs.org/dist/v26.1.0/${pkg}`, dest);
+        run(`sudo installer -pkg "${dest}" -target /`);
+        await new Promise(r => setTimeout(r, 20000));
+        fs.unlinkSync(dest);
+      } else {
+        run('curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -');
+        run('sudo apt-get install -y nodejs 2>&1');
+        await new Promise(r => setTimeout(r, 20000));
+      }
+      return check('node');
+    });
     console.log(`[AURA] Node.js: ${nodeOk ? '✓' : '✗'}`);
   } else {
     console.log('[AURA] Node.js ✓');
@@ -132,37 +184,32 @@ async function ensureRuntime() {
     }
   }
   if (!pythonOk) {
-    console.log('[AURA] Python не найден — устанавливаю...');
-    const tmp = path.join(RUNTIME_DIR, 'tmp');
-    if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
-
-    if (isWin) {
-      // Windows: EXE installer
-      const installer = path.join(tmp, 'python-3.12.3-amd64.exe');
-      await download('https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe', installer);
-      run(`"${installer}" /quiet InstallAllUsers=0 PrependPath=1`);
-      await new Promise(r => setTimeout(r, 20000));
-      fs.unlinkSync(installer);
-    } else if (isMac) {
-      // macOS: официальный .pkg установщик
-      const pkg = 'python-3.12.3-macos11.pkg';
-      const dest = path.join(tmp, pkg);
-      await download(`https://www.python.org/ftp/python/3.12.3/${pkg}`, dest);
-      run(`sudo installer -pkg "${dest}" -target /`);
-      await new Promise(r => setTimeout(r, 20000));
-      fs.unlinkSync(dest);
-    } else {
-      // Linux: через deadsnakes PPA + apt
-      console.log('[AURA] Устанавливаю Python через deadsnakes...');
-      run('sudo add-apt-repository -y ppa:deadsnakes/ppa 2>&1');
-      run('sudo apt-get update -qq 2>&1');
-      run('sudo apt-get install -y python3.12 python3.12-pip python3.12-venv 2>&1');
-      // Создаём симлинк python → python3.12 если нет
-      run('sudo ln -sf /usr/bin/python3.12 /usr/local/bin/python 2>&1');
-      run('sudo ln -sf /usr/bin/pip3.12 /usr/local/bin/pip 2>&1');
-      await new Promise(r => setTimeout(r, 15000));
-    }
-    pythonOk = check('python') || check('python3');
+    pythonOk = await tryInstall('Python', async () => {
+      const tmp = path.join(RUNTIME_DIR, 'tmp');
+      if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
+      if (isWin) {
+        const installer = path.join(tmp, 'python-3.12.3-amd64.exe');
+        await download('https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe', installer);
+        run(`"${installer}" /quiet InstallAllUsers=0 PrependPath=1`);
+        await new Promise(r => setTimeout(r, 20000));
+        fs.unlinkSync(installer);
+      } else if (isMac) {
+        const pkg = 'python-3.12.3-macos11.pkg';
+        const dest = path.join(tmp, pkg);
+        await download(`https://www.python.org/ftp/python/3.12.3/${pkg}`, dest);
+        run(`sudo installer -pkg "${dest}" -target /`);
+        await new Promise(r => setTimeout(r, 20000));
+        fs.unlinkSync(dest);
+      } else {
+        run('sudo add-apt-repository -y ppa:deadsnakes/ppa 2>&1');
+        run('sudo apt-get update -qq 2>&1');
+        run('sudo apt-get install -y python3.12 python3.12-pip python3.12-venv 2>&1');
+        run('sudo ln -sf /usr/bin/python3.12 /usr/local/bin/python 2>&1');
+        run('sudo ln -sf /usr/bin/pip3.12 /usr/local/bin/pip 2>&1');
+        await new Promise(r => setTimeout(r, 15000));
+      }
+      return check('python') || check('python3');
+    });
     console.log(`[AURA] Python: ${pythonOk ? '✓' : '✗'}`);
   } else {
     console.log('[AURA] Python ✓');
