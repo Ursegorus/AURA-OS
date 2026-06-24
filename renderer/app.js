@@ -214,7 +214,7 @@ async function loadAgents() {
       <div class="agent-foot">
         <label class="switch"><input type="checkbox" data-toggle="${a.id}" ${a.enabled ? 'checked' : ''}/> ${t('agent_enabled')}</label>
         ${a.builtin ? '' : `<button class="btn danger" data-del="${a.id}">${t('delete')}</button>`}
-        ${!a.available && a.installHint ? `<button class="btn primary btn-install-agent" data-cmd="${esc(a.installHint)}">⚡ Установить</button>` : ''}
+        ${!a.available && a.installHint ? `<button class="btn primary btn-install-agent" data-cmd="${esc(a.installHint)}">Установить</button>` : ''}
       </div>
     </div>`).join('');
 
@@ -228,7 +228,7 @@ async function loadAgents() {
   $$('.btn-install-agent').forEach(el => el.addEventListener('click', async function() {
     const cmd = this.dataset.cmd;
     this.disabled = true;
-    this.textContent = '⏳...';
+    this.textContent = '⋯';
     const res = await window.aura.agentsInstall({ command: cmd });
     if (res.ok) {
       this.textContent = '[OK]';
@@ -315,13 +315,13 @@ async function loadSettings() {
     } else {
       el.innerHTML = `<span class="hermes-err">✗ OpenCode не установлен</span>`;
       if (state.settings.orchestratorMode === 'opencode') {
-        el.innerHTML += ` <button class="btn ghost" id="btn-install-opencode-status">⚡ Установить</button>`;
+        el.innerHTML += ` <button class="btn ghost" id="btn-install-opencode-status">Установить</button>`;
         setTimeout(() => {
           const btn = document.getElementById('btn-install-opencode-status');
           if (btn) btn.addEventListener('click', async function() {
-            this.textContent = '⏳...';
+            this.textContent = '⋯';
             const res = await window.aura.agentsInstall({ command: 'opencode-ai@latest' });
-            this.textContent = res.ok ? '✅' : '✗ Ошибка';
+            this.textContent = res.ok ? '✓' : '✗ Ошибка';
             if (res.ok) setTimeout(() => location.reload(), 2000);
           });
         }, 100);
