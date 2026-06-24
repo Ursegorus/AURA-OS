@@ -349,11 +349,15 @@ class HermesEngine {
     this.emit({ type: 'task-created', task: this.publicTask(task) });
     this.emit({ type: 'log', taskId, agent: 'hermes', text: `[AURA] Запуск через Hermes engine…\n` });
 
+    // Контекст из базы знаний
+    const vaultCtx = this.memory.searchContext(input, 5);
+
     // Собираем промпт для Hermes
     // Навык aura-os-orchestrator уже загружен в профиле, так что
     // Hermes сам знает, как оркестрировать CLI-агенты.
     const prompt = [
       `Задача от AURA OS: ${input}`,
+      vaultCtx ? `\nКонтекст из базы знаний:${vaultCtx}` : '',
       `Рабочая директория (ВСЕ файлы создавай ТОЛЬКО здесь): ${cwd}`,
       '',
       'Координатор: hermes',
@@ -559,11 +563,14 @@ class OpenCodeEngine {
     };
     this.tasks.set(taskId, task);
     this.emit({ type: 'task-created', task: this.publicTask(task) });
-    this.emit({ type: 'log', taskId, agent: 'opencode', text: `[AURA] Запуск через OpenCode engine (бесплатные модели)
-` });
+    this.emit({ type: 'log', taskId, agent: 'opencode', text: `[AURA] Запуск через OpenCode engine (бесплатные модели)\n` });
+
+    // Контекст из базы знаний
+    const vaultCtx = this.memory.searchContext(input, 5);
 
     const prompt = [
       `Задача от AURA OS: ${input}`,
+      vaultCtx ? `\nКонтекст из базы знаний:${vaultCtx}` : '',
       `Рабочая директория (ВСЕ файлы создавай ТОЛЬКО здесь): ${cwd}`,
       '',
       'ВАЖНО: Все файлы, папки, артефакты — строго внутри рабочей директории.',
