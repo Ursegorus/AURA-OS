@@ -73,7 +73,7 @@
         <div class="view-head">
           <h2 data-i18n="memory_title"></h2>
           <div>
-            <button id="btn-open-graph" class="btn ghost">🕸 Граф</button>
+            <button id="btn-open-graph" class="btn ghost" data-i18n="memory_graph"></button>
             <button id="btn-open-vault" class="btn ghost" data-i18n="memory_open"></button>
           </div>
         </div>
@@ -129,7 +129,7 @@
           <label data-i18n="set_vault"></label>
           <div class="row"><input id="set-vault" type="text" readonly /><button class="btn ghost" id="pick-vault" data-i18n="set_pick"></button></div>
 
-          <label>📂 Папка базы знаний (если нет Obsidian)</label>
+          <label data-i18n="knowledge_path"></label>
           <div class="row"><input id="set-knowledge" type="text" readonly /><button class="btn ghost" id="pick-knowledge" data-i18n="set_pick"></button></div>
 
           <label data-i18n="set_workspace"></label>
@@ -149,24 +149,24 @@
           <label class="check"><input id="set-review" type="checkbox" /> <span data-i18n="set_review"></span></label>
 
           <div class="hermes-section">
-            <h3>⚡ Движок оркестрации</h3>
-            <p class="hint">Выберите, какой AI-движок будет выполнять задачи. Auto = Hermes (если есть ключи) → OpenCode (бесплатно) → Legacy.</p>
-            <select id="set-engine">
-              <option value="auto">Auto (рекомендуется)</option>
-              <option value="hermes">Hermes Agent (нужен API-ключ)</option>
-              <option value="opencode">OpenCode (бесплатно, без ключей)</option>
-              <option value="claude">Claude Code (подписка / API)</option>
-              <option value="legacy">Встроенный оркестратор</option>
-            </select>
+            <h3 data-i18n="set_engine"></h3>
+                        <p class="hint" data-i18n="engine_hint"></p>
+                        <select id="set-engine">
+                          <option value="auto" data-i18n="engine_auto"></option>
+                          <option value="hermes" data-i18n="engine_hermes"></option>
+                          <option value="opencode" data-i18n="engine_opencode"></option>
+                          <option value="claude" data-i18n="engine_claude"></option>
+                          <option value="legacy" data-i18n="engine_legacy"></option>
+                        </select>
             <div id="hermes-status" class="hermes-engine-status"></div>
             <div id="opencode-status" class="hermes-engine-status" style="margin-top:4px"></div>
           </div>
 
           <div class="aifree-section">
-            <h3>🧩 AI Free API</h3>
-            <p class="hint">Бесплатный API DeepSeek/Qwen/ChatGPT через <a href="#" id="aifree-link">Staks-sor/ai-free</a>.
-            Запусти <code>npm run api</code> в папке ai-free, затем включи опцию ниже.</p>
-            <label class="check"><input id="set-aifree" type="checkbox" /> <span>Использовать AI Free как провайдера</span></label>
+            <h3 data-i18n="aifree_title"></h3>
+                        <p class="hint" data-i18n="aifree_hint"></p>
+                        <p class="hint">GitHub: <a href="#" id="aifree-link">Staks-sor/ai-free</a>. Запусти <code>npm run api</code>, затем включи ниже.</p>
+                        <label class="check"><input id="set-aifree" type="checkbox" /> <span data-i18n="aifree_enable"></span></label>
           </div>
 
           <div class="tg-section">

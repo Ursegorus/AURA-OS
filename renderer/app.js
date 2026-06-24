@@ -180,16 +180,16 @@ async function loadAgents() {
         <div class="empty-icon">⬡</div>
         <h3>У вас нет установленных AI-агентов</h3>
         <p class="hint">Нажмите «Установить» рядом с OpenCode — получите бесплатного AI-помощника с открытым кодом. Никаких регистраций и ключей.</p>
-        <button class="btn primary" id="btn-install-opencode">⚡ Установить OpenCode</button>
+        <button class="btn primary" id="btn-install-opencode">+ Установить OpenCode</button>
       </div>`;
     const btn = document.getElementById('btn-install-opencode');
     if (btn) {
       btn.addEventListener('click', async function() {
         this.disabled = true;
-        this.textContent = '⏳ Установка...';
+        this.textContent = '[···] Установка...';
         const res = await window.aura.agentsInstall({ command: 'opencode-ai@latest' });
         if (res.ok) {
-          this.textContent = '✅ Установлено!';
+          this.textContent = '[OK] Установлено!';
           setTimeout(() => loadAgents(), 2000);
         } else {
           this.textContent = '✗ Ошибка. Установите Node.js и попробуйте снова.';
@@ -231,11 +231,11 @@ async function loadAgents() {
     this.textContent = '⏳...';
     const res = await window.aura.agentsInstall({ command: cmd });
     if (res.ok) {
-      this.textContent = '✅';
+      this.textContent = '[OK]';
       setTimeout(() => loadAgents(), 2000);
     } else {
       this.textContent = '✗ Ошибка';
-      setTimeout(() => { this.textContent = '⚡ Установить'; this.disabled = false; }, 3000);
+      setTimeout(() => { this.textContent = '+ Установить'; this.disabled = false; }, 3000);
     }
   }));
 }
@@ -301,8 +301,8 @@ async function loadSettings() {
     const st = await window.aura.hermesStatus();
     const el = $('#hermes-status');
     if (el) {
-      if (st.ok) el.innerHTML = `<span class="hermes-ok">✅ Hermes Agent: ${esc(st.version)}</span>`;
-      else el.innerHTML = `<span class="hermes-err">❌ Hermes Agent не найден</span>`;
+      if (st.ok) el.innerHTML = `<span class="hermes-ok">✓ Hermes Agent: ${esc(st.version)}</span>`;
+      else el.innerHTML = `<span class="hermes-err">✗ Hermes Agent не найден</span>`;
     }
   })();
   // Статус OpenCode
@@ -311,9 +311,9 @@ async function loadSettings() {
     const el = $('#opencode-status');
     if (!el) return;
     if (state.settings.opencodeAvailable) {
-      el.innerHTML = `<span class="hermes-ok">✅ OpenCode доступен (бесплатные модели)</span>`;
+      el.innerHTML = `<span class="hermes-ok">✓ OpenCode доступен (бесплатные модели)</span>`;
     } else {
-      el.innerHTML = `<span class="hermes-err">❌ OpenCode не установлен</span>`;
+      el.innerHTML = `<span class="hermes-err">✗ OpenCode не установлен</span>`;
       if (state.settings.orchestratorMode === 'opencode') {
         el.innerHTML += ` <button class="btn ghost" id="btn-install-opencode-status">⚡ Установить</button>`;
         setTimeout(() => {
@@ -368,7 +368,7 @@ $('#btn-open-graph').addEventListener('click', async function () {
   modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;background:#0b0f17;display:flex;flex-direction:column';
   modal.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:#0f172a;border-bottom:1px solid #1e293b">
-      <span style="color:#e2e8f0;font-weight:600">🕸 Граф знаний</span>
+      <span style="color:#e2e8f0;font-weight:600">◎ Граф знаний</span>
       <button id="graph-close" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">✕</button>
     </div>
     <iframe id="graph-frame" style="flex:1;border:none" sandbox="allow-scripts"></iframe>`;
@@ -566,10 +566,10 @@ async function loadShopResults(source) {
   panel.querySelectorAll('.shop-install').forEach(b => b.addEventListener('click', async () => {
     const id = b.dataset.id;
     b.disabled = true;
-    b.textContent = '⏳';
+    b.textContent = '[···]';
     const result = await window.aura.skillsInstall(id);
     if (result && result.ok) {
-      b.textContent = '✅';
+      b.textContent = '[OK]';
       b.classList.remove('primary');
       b.classList.add('ghost');
     } else {

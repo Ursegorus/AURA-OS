@@ -168,6 +168,10 @@ class Memory {
       '_BRAIN/Выводы/README.md': '# Выводы из сессий\nФормат: дата / что сделали / что решили /下一步.\n',
       '_BRAIN/Стратегии/README.md': '# Стратегии\nv1, v2... Первая строка: # АКТУАЛЬНАЯ или # АРХИВ.\n',
       '_BRAIN/Архив/README.md': '# Архив\nФайлы старше 30 дней. Только по запросу.\n',
+      '_BRAIN/hot.md': '# Горячее ядро (hot)\n\nОбновляется в конце каждой сессии.\n\n## Фокус сессии\n\n## Что сделали\n\n## Следующий шаг\n\n## Тронутые файлы\n',
+      '_BRAIN/STACK.md': '# Стек (инфраструктура)\n\nПути к инструментам, ключи, окружение.\n\n## Рабочая папка проектов\n`~/Projects`\n\n## Инструменты\n\n',
+      '_BRAIN/Встречи/README.md': '# Встречи\n\nФормат: `ГГГГ-ММ-ДД_название.md`\nFrontmatter: date, type, project, participants, confidential, tags\n',
+      '_BRAIN/Постмортем/README.md': '# Postmortem\n\nФормат: Timeline / План vs Факт / Root cause / Что повторить / Что не повторить\n',
       'README.md': `# База знаний\n\nСоздано AURA OS.\nСтруктура: [Second Brain Kit](https://github.com/vasin-k-i/second-brain-kit) (Константин Васин)\n`,
       'Проекты/README.md': '# Проекты\n\nПо одному README.md на проект.\n'
     };
@@ -177,7 +181,7 @@ class Memory {
 
     // Папки
     const allDirs = ['_BRAIN/Заметки', '_BRAIN/Решения', '_BRAIN/Выводы',
-      '_BRAIN/Стратегии', '_BRAIN/Архив', 'Проекты'];
+      '_BRAIN/Стратегии', '_BRAIN/Архив', '_BRAIN/Встречи', '_BRAIN/Постмортем', 'Проекты'];
     for (const d of allDirs) {
       const full = path.join(base, d);
       if (!fs.existsSync(full)) {
