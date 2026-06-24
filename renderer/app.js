@@ -291,15 +291,41 @@ async function loadSettings() {
   $('#set-parallel').value = state.settings.maxParallel;
   $('#set-fix').value = state.settings.maxFixRounds;
   $('#set-review').checked = !!state.settings.reviewEnabled;
-  // Hermes engine
-  $('#set-hermes').checked = !!state.settings.useHermesEngine;
+  // Движок
+  const mode = state.settings.orchestratorMode || 'auto';
+  const hermesOk = state.settings.hermesAvailable;
+  const opencodeOk = state.settings.opencodeAvailable;
+  $('#set-engine').value = mode;
   // Статус Hermes
   (async () => {
     const st = await window.aura.hermesStatus();
     const el = $('#hermes-status');
     if (el) {
       if (st.ok) el.innerHTML = `<span class="hermes-ok">✅ Hermes Agent: ${esc(st.version)}</span>`;
-      else el.innerHTML = `<span class="hermes-err">❌ Hermes Agent не найден. Перезапустите AURA OS для установки.</span>`;
+      else el.innerHTML = `<span class="hermes-err">❌ Hermes Agent не найден</span>`;
+    }
+  })();
+  // Статус OpenCode
+  (async () => {
+    const el = $('#opencode-status');
+    if (!el) return;
+    if (state.settings.opencodeAvailable) {
+      el.innerHTML = `<span class="hermes-ok">✅ OpenCode доступен (бесплатные модели)</span>`;
+    } else {
+      el.innerHTML = `<span class="hermes-err">❌ OpenCode не установлен</span>`;
+      // Если OpenCode не установлен и это режим opencode — предлагаем установить
+      if (state.settings.orchestratorMode === 'opencode') {
+        el.innerHTML += ` <button class="btn ghost" id="btn-install-opencode-status">⚡ Установить</button>`;
+        setTimeout(() => {
+          const btn = document.getElementById('btn-install-opencode-status');
+          if (btn) btn.addEventListener('click', async function() {
+            this.textContent = '⏳...';
+            const res = await window.aura.agentsInstall({ command: 'opencode-ai@latest' });
+            this.textContent = res.ok ? '✅' : '✗ Ошибка';
+            if (res.ok) setTimeout(() => location.reload(), 2000);
+          });
+        }, 100);
+      }
     }
   })();
   // AI Free
@@ -343,7 +369,8 @@ $('#btn-save-settings').addEventListener('click', async () => {
     maxParallel: parseInt($('#set-parallel').value, 10) || 3,
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,
     reviewEnabled: $('#set-review').checked,
-    useHermesEngine: $('#set-hermes').checked,
+    orchestratorMode: $('#set-engine').value,
+    useHermesEngine: false,
     useAIFree: $('#set-aifree').checked,
     telegramEnabled: $('#set-tg-enabled').checked,
     telegramToken: $('#set-tg-token').value.trim(),

@@ -517,6 +517,127 @@ class HermesEngine {
   }
 }
 
+
+// ============================================================
+//  OPENCODE ENGINE — ОРКЕСТРАЦИЯ ЧЕРЕЗ OPENCODE CLI
+//  Не требует API-ключей — использует встроенные бесплатные модели
+// ============================================================
+
+class OpenCodeEngine {
+  constructor(agents, memory, store, emit) {
+    this.agents = agents;
+    this.memory = memory;
+    this.store = store;
+    this.emit = emit;
+    this.tasks = new Map();
+    this._running = new Map();
+  }
+
+  settings() {
+    return {
+      workspace: this.store.get('workspace', ''),
+      maxParallel: this.store.get('maxParallel', 3)
+    };
+  }
+
+  workspaceDir() {
+    let ws = this.settings().workspace;
+    if (!ws) {
+      ws = path.join(require('os').homedir(), 'AURA-Workspace');
+    }
+    if (!fs.existsSync(ws)) fs.mkdirSync(ws, { recursive: true });
+    return ws;
+  }
+
+  async startTask(input) {
+    const taskId = nextId('opencode-task');
+    const cwd = this.workspaceDir();
+    const task = {
+      id: taskId, input, title: input.slice(0, 60), status: 'running',
+      subtasks: [], startedAt: Date.now(), summary: '',
+      output: '', engine: 'opencode'
+    };
+    this.tasks.set(taskId, task);
+    this.emit({ type: 'task-created', task: this.publicTask(task) });
+    this.emit({ type: 'log', taskId, agent: 'opencode', text: `[AURA] Запуск через OpenCode engine (бесплатные модели)
+` });
+
+    const prompt = [
+      `Задача от AURA OS: ${input}`,
+      `Рабочая директория (ВСЕ файлы создавай ТОЛЬКО здесь): ${cwd}`,
+      '',
+      'ВАЖНО: Все файлы, папки, артефакты — строго внутри рабочей директории.',
+      'Пиши на русском.'
+    ].join('\n');
+
+    const args = ['run', prompt];
+    const escaped = args.map(a => {
+      const s = String(a);
+      return /[ "']/.test(s) ? '"' + s.replace(/"/g, '\\"') + '"' : s;
+    });
+
+    const child = IS_WIN
+      ? spawn('cmd.exe', ['/c', 'opencode', ...escaped], { cwd, windowsHide: true, env: { ...process.env, NO_COLOR: '1', TERM: 'dumb' } })
+      : spawn('opencode', args, { cwd, windowsHide: true, env: { ...process.env, NO_COLOR: '1', TERM: 'dumb' } });
+
+    this._running.set(taskId, child);
+
+    let output = '';
+    child.stdout.on('data', d => { const t = d.toString(); output += t; task.output = output; this.emit({ type: 'log', taskId, agent: 'opencode', text: t }); });
+    child.stderr.on('data', d => { const t = d.toString(); output += t; task.output = output; this.emit({ type: 'log', taskId, agent: 'opencode', text: t }); });
+
+    return new Promise((resolve) => {
+      child.on('error', (err) => {
+        task.status = 'failed';
+        task.summary = 'OpenCode engine error: ' + err.message;
+        this.emit({ type: 'log', taskId, agent: 'opencode', text: `\n[AURA] Ошибка: ${err.message}\n` });
+        this.finishTask(task);
+        resolve(taskId);
+      });
+      child.on('close', (code) => {
+        this._running.delete(taskId);
+        task.status = code === 0 ? 'completed' : 'failed';
+        task.summary = output.slice(-500).trim();
+        this.finishTask(task);
+        resolve(taskId);
+      });
+    });
+  }
+
+  finishTask(task) {
+    let notePath = null;
+    try {
+      const note = this.memory.saveTaskNote({
+        id: task.id, input: task.input, title: task.title,
+        status: task.status, summary: task.summary,
+        subtasks: [{ title: 'OpenCode выполнение', agent: 'OpenCode', agentName: 'OpenCode', role: 'coder', output: task.output }]
+      });
+      if (note) { notePath = note; this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Результат сохранён в память Obsidian: ' + note + '\n' }); }
+    } catch (e) {
+      this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: '\n[AURA] Не удалось записать в Obsidian: ' + e.message + '\n' });
+    }
+    this.emit({ type: 'task-updated', task: this.publicTask(task) });
+  }
+
+  cancelTask(taskId) {
+    const child = this._running.get(taskId);
+    if (child) { try { child.kill(); } catch (_) {} this._running.delete(taskId); }
+    const task = this.tasks.get(taskId);
+    if (task) { task.status = 'cancelled'; this.emit({ type: 'task-updated', task: this.publicTask(task) }); return true; }
+    return false;
+  }
+
+  publicTask(task) {
+    return { id: task.id, input: task.input, title: task.title, status: task.status, startedAt: task.startedAt, summary: task.summary, engine: task.engine, subtasks: task.subtasks };
+  }
+
+  listTasks() {
+    return Array.from(this.tasks.values()).reverse();
+  }
+}
+
+// ФАБРИКА — выбирает движок по настройке orchestratorMode
+
 // ============================================================
 //  ФАБРИКА — выбирает движок в зависимости от настроек
 // ============================================================
@@ -529,11 +650,48 @@ class Orchestrator {
     this.emit = emit;
     this._legacy = new LegacyOrchestrator(agents, memory, store, emit);
     this._hermes = new HermesEngine(agents, memory, store, emit);
+    this._opencode = new OpenCodeEngine(agents, memory, store, emit);
   }
 
   _engine() {
-    const useHermes = this.store.get('useHermesEngine', false);
-    return useHermes ? this._hermes : this._legacy;
+    const mode = this.store.get('orchestratorMode', 'auto');
+    if (mode === 'legacy') return this._legacy;
+    if (mode === 'hermes') {
+      // Проверяем, установлен ли Hermes
+      const hermesOk = this.store.get('_hermesAvailable', false);
+      if (!hermesOk) {
+        const opencodeOk = this.store.get('_opencodeAvailable', false);
+        return opencodeOk ? this._opencode : this._legacy;
+      }
+      return this._hermes;
+    }
+    if (mode === 'opencode') {
+      const opencodeOk = this.store.get('_opencodeAvailable', false);
+      return opencodeOk ? this._opencode : this._legacy;
+    }
+    // auto: hermes > opencode > legacy
+    const hermesOk = this.store.get('_hermesAvailable', false);
+    if (hermesOk) return this._hermes;
+    const opencodeOk = this.store.get('_opencodeAvailable', false);
+    return opencodeOk ? this._opencode : this._legacy;
+  }
+
+  /** Вызывается при старте — проверяет доступные движки. */
+  async detectEngines() {
+    const { execFile } = require('child_process');
+    const check = (cmd) => new Promise(resolve => {
+      const c = require('child_process').spawn(process.platform === 'win32' ? 'cmd.exe' : 'sh',
+        [process.platform === 'win32' ? '/c' : '-c', cmd + ' --version 2>&1'], { windowsHide: true });
+      let out = '';
+      c.stdout.on('data', d => out += d);
+      c.stderr.on('data', d => out += d);
+      c.on('close', code => resolve(code === 0));
+    });
+    const hermes = await check('hermes');
+    const opencode = await check('opencode');
+    this.store.set('_hermesAvailable', hermes);
+    this.store.set('_opencodeAvailable', opencode);
+    return { hermes, opencode };
   }
 
   startTask(input) { return this._engine().startTask(input); }
@@ -543,4 +701,4 @@ class Orchestrator {
   workspaceDir() { return this._engine().workspaceDir(); }
 }
 
-module.exports = { Orchestrator, LegacyOrchestrator, HermesEngine };
+module.exports = { Orchestrator, LegacyOrchestrator, HermesEngine, OpenCodeEngine };

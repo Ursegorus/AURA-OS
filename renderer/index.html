@@ -143,10 +143,16 @@
           <label class="check"><input id="set-review" type="checkbox" /> <span data-i18n="set_review"></span></label>
 
           <div class="hermes-section">
-            <h3>⚡ Hermes AI engine</h3>
-            <p class="hint" data-i18n="hermes_hint"></p>
-            <label class="check"><input id="set-hermes" type="checkbox" /> <span data-i18n="hermes_enable"></span></label>
+            <h3>⚡ Движок оркестрации</h3>
+            <p class="hint">Выберите, какой AI-движок будет выполнять задачи. Auto = Hermes (если есть ключи) → OpenCode (бесплатно) → Legacy.</p>
+            <select id="set-engine">
+              <option value="auto">Auto (рекомендуется)</option>
+              <option value="hermes">Hermes Agent (нужен API-ключ)</option>
+              <option value="opencode">OpenCode (бесплатно, без ключей)</option>
+              <option value="legacy">Встроенный оркестратор</option>
+            </select>
             <div id="hermes-status" class="hermes-engine-status"></div>
+            <div id="opencode-status" class="hermes-engine-status" style="margin-top:4px"></div>
           </div>
 
           <div class="aifree-section">

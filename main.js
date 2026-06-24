@@ -117,6 +117,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   await ensureHermes();
+  await orchestrator.detectEngines();
   createWindow();
   telegram.restart().catch(() => {});
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -177,8 +178,10 @@ ipcMain.handle('settings:get', () => ({
   telegramEnabled: store.get('telegramEnabled', false),
   telegramToken: store.get('telegramToken', ''),
   telegramAllowed: store.get('telegramAllowed', ''),
-  // Hermes engine
-  useHermesEngine: store.get('useHermesEngine', false),
+  // Движок: auto / hermes / opencode / legacy
+  orchestratorMode: store.get('orchestratorMode', 'auto'),
+  hermesAvailable: store.get('_hermesAvailable', false),
+  opencodeAvailable: store.get('_opencodeAvailable', false),
   // AI Free
   useAIFree: store.get('useAIFree', false),
   aifreePath: store.get('aifreePath', '')
