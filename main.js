@@ -51,13 +51,12 @@ const telegram = new TelegramTerminal({
 const RUNTIME_DIR = path.join(require('os').homedir(), '.aura-runtime');
 
 async function ensureRuntime() {
-  const { spawnSync, execFileSync } = require('child_process');
+  const { spawnSync } = require('child_process');
   const isWin = process.platform === 'win32';
-  const ext = isWin ? '.exe' : '';
+  const isMac = process.platform === 'darwin';
   const http = require('https');
   const fs = require('fs');
 
-  // Функция проверки: вернулся ли 0 от команды --version
   function check(cmd) {
     try {
       const r = spawnSync(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', cmd + ' --version 2>&1'], { windowsHide: true, encoding: 'utf8' });
@@ -65,72 +64,126 @@ async function ensureRuntime() {
     } catch (_) { return false; }
   }
 
-  // Функция установки: скачать и установить нормальным установщиком
-  async function install(platform, version, label) {
-    console.log(`[AURA] ${label} не найден — устанавливаю...`);
-    const tmpDir = path.join(RUNTIME_DIR, 'tmp');
-    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  function run(cmd) {
+    return spawnSync(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', cmd], { windowsHide: true, encoding: 'utf8', timeout: 120000 });
+  }
 
-    const isNode = platform === 'node';
-    const exeName = isNode ? `node-v${version}-x64.msi` : `python-${version}-amd64.exe`;
-    const url = isNode
-      ? `https://nodejs.org/dist/v${version}/${exeName}`
-      : `https://www.python.org/ftp/python/${version}/${exeName}`;
-    const installerPath = path.join(tmpDir, exeName);
-
-    // Скачиваем
-    console.log(`[AURA] Скачиваю ${label}...`);
-    await new Promise((resolve, reject) => {
-      const file = fs.createWriteStream(installerPath);
+  function download(url, dest) {
+    return new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(dest);
       http.get(url, (res) => {
         if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
         res.pipe(file);
         file.on('finish', () => { file.close(); resolve(); });
       }).on('error', reject);
     });
-
-    // Устанавливаем
-    console.log(`[AURA] Устанавливаю ${label}...`);
-    const installCmd = isNode
-      ? `msiexec /i "${installerPath}" /quiet /norestart`
-      : `"${installerPath}" /quiet InstallAllUsers=0 PrependPath=1`;
-    
-    spawnSync(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', installCmd], { windowsHide: true, timeout: 120000 });
-    // Ждём завершения установки (msiexec асинхронный)
-    await new Promise(r => setTimeout(r, isNode ? 30000 : 15000));
-    fs.unlinkSync(installerPath);
-
-    // Проверка
-    const checkCmd = isNode ? 'node' : 'python';
-    const ok = check(checkCmd);
-    console.log(`[AURA] ${label} установка: ${ok ? '✓' : '✗'}`);
-    return ok;
   }
 
-  // Проверяем Node.js
+  // ─── Node.js ────────────────────────────────────────────
   let nodeOk = check('node');
   if (!nodeOk) {
-    // Пробуем найти в RUNTIME_DIR (возможно установили в прошлый раз)
     const nodeDir = path.join(RUNTIME_DIR, 'node');
-    if (fs.existsSync(path.join(nodeDir, 'node.exe')) || fs.existsSync(path.join(nodeDir, 'node'))) {
-      process.env.PATH = nodeDir + path.delimiter + process.env.PATH;
+    if (fs.existsSync(path.join(nodeDir, 'node' + (isWin ? '.exe' : '')))) {
+      process.env.PATH = path.join(nodeDir, 'bin') + path.delimiter + process.env.PATH;
       nodeOk = check('node');
     }
   }
-  if (!nodeOk) nodeOk = await install('node', '26.1.0', 'Node.js');
-  if (nodeOk) console.log('[AURA] Node.js ✓');
+  if (!nodeOk) {
+    console.log('[AURA] Node.js не найден — устанавливаю...');
+    const tmp = path.join(RUNTIME_DIR, 'tmp');
+    if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
 
-  // Проверяем Python
+    let arch = isWin ? 'win-x64' : (isMac ? 'darwin-x64' : 'linux-x64');
+    // Apple Silicon → arm64
+    if (isMac && require('os').arch() === 'arm64') arch = 'darwin-arm64';
+    const ext = isWin ? '.msi' : '.tar.gz';
+    const archiveName = `node-v26.1.0-${arch}${ext}`;
+    const url = `https://nodejs.org/dist/v26.1.0/${archiveName}`;
+    const dest = path.join(tmp, archiveName);
+    
+    await download(url, dest);
+    
+    if (isWin) {
+      run(`msiexec /i "${dest}" /quiet /norestart`);
+      await new Promise(r => setTimeout(r, 30000));
+    } else {
+      const extractDir = path.join(RUNTIME_DIR, 'node');
+      if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir, { recursive: true });
+      run(`tar -xzf "${dest}" -C "${extractDir}" --strip-components=1`);
+      process.env.PATH = path.join(extractDir, 'bin') + path.delimiter + process.env.PATH;
+    }
+    fs.unlinkSync(dest);
+    nodeOk = check('node');
+    console.log(`[AURA] Node.js: ${nodeOk ? '✓' : '✗'}`);
+  } else {
+    console.log('[AURA] Node.js ✓');
+  }
+
+  // ─── Python ────────────────────────────────────────────
   let pythonOk = check('python') || check('python3');
   if (!pythonOk) {
     const pyDir = path.join(RUNTIME_DIR, 'python');
-    if (fs.existsSync(path.join(pyDir, 'python.exe')) || fs.existsSync(path.join(pyDir, 'python'))) {
-      process.env.PATH = pyDir + path.delimiter + process.env.PATH;
+    if (fs.existsSync(path.join(pyDir, 'python' + (isWin ? '.exe' : ''))) || fs.existsSync(path.join(pyDir, 'python3'))) {
+      process.env.PATH = path.join(pyDir, 'bin') + path.delimiter + process.env.PATH;
       pythonOk = check('python') || check('python3');
     }
   }
-  if (!pythonOk) pythonOk = await install('python', '3.12.3', 'Python');
-  if (pythonOk) console.log('[AURA] Python ✓');
+  if (!pythonOk) {
+    console.log('[AURA] Python не найден — устанавливаю...');
+    const tmp = path.join(RUNTIME_DIR, 'tmp');
+    if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
+
+    if (isWin) {
+      // Windows: EXE installer
+      const installer = path.join(tmp, 'python-3.12.3-amd64.exe');
+      await download('https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe', installer);
+      run(`"${installer}" /quiet InstallAllUsers=0 PrependPath=1`);
+      await new Promise(r => setTimeout(r, 20000));
+      fs.unlinkSync(installer);
+    } else {
+      // Linux/macOS: устанавливаем uv, затем uv python install
+      console.log('[AURA] Устанавливаю uv (менеджер Python)...');
+      run('curl -LsSf https://astral.sh/uv/install.sh | sh');
+      // uv ставится в ~/.cargo/bin/ или ~/.local/bin/
+      const uvPaths = [
+        path.join(require('os').homedir(), '.cargo', 'bin'),
+        path.join(require('os').homedir(), '.local', 'bin')
+      ];
+      for (const p of uvPaths) {
+        if (fs.existsSync(path.join(p, 'uv'))) {
+          process.env.PATH = p + path.delimiter + process.env.PATH;
+          break;
+        }
+      }
+      // Проверяем что uv работает
+      const uvOk = check('uv');
+      if (uvOk) {
+        console.log('[AURA] Устанавливаю Python через uv...');
+        run('uv python install 3.12 2>&1');
+        // uv добавляет Python в PATH сам, но на всякий случай
+        await new Promise(r => setTimeout(r, 10000));
+      } else {
+        console.log('[AURA] uv не установился. Пробую pyenv...');
+        run('curl https://pyenv.run | bash');
+        const pyenvPaths = [
+          path.join(require('os').homedir(), '.pyenv', 'bin'),
+          path.join(require('os').homedir(), '.pyenv', 'shims')
+        ];
+        for (const p of pyenvPaths) {
+          if (fs.existsSync(p)) process.env.PATH = p + path.delimiter + process.env.PATH;
+        }
+        if (check('pyenv')) {
+          run('pyenv install 3.12.3 2>&1');
+          run('pyenv global 3.12.3 2>&1');
+          await new Promise(r => setTimeout(r, 30000));
+        }
+      }
+    }
+    pythonOk = check('python') || check('python3');
+    console.log(`[AURA] Python: ${pythonOk ? '✓' : '✗'}`);
+  } else {
+    console.log('[AURA] Python ✓');
+  }
 
   return { node: nodeOk, python: pythonOk };
 }
