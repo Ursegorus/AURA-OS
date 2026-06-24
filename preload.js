@@ -45,5 +45,6 @@ contextBridge.exposeInMainWorld('aura', {
   aifreeToggle: (enabled) => ipcRenderer.invoke('aifree:toggle', enabled),
   aifreePing: () => ipcRenderer.invoke('aifree:ping'),
   shellOpenExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
-  agentsInstall: (opts) => ipcRenderer.invoke('agents:install', opts)
+  agentsInstall: (opts) => ipcRenderer.invoke('agents:install', opts),
+  hermesStatus: () => ipcRenderer.invoke('hermes:status')
 });

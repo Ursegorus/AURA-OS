@@ -42,6 +42,53 @@ const telegram = new TelegramTerminal({
   onLog: (line) => process.stdout.write(line)
 });
 
+// ---------- Auto-install / update Hermes Agent (движок обязателен) ----------
+function ensureHermes() {
+  return new Promise(resolve => {
+    const { spawn } = require('child_process');
+    const isWin = process.platform === 'win32';
+
+    // Проверяем, установлен ли Hermes
+    const test = spawn(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', 'hermes --version 2>&1'], { windowsHide: true });
+    let verOut = '';
+    test.stdout.on('data', d => verOut += d.toString());
+    test.stderr.on('data', d => verOut += d.toString());
+    test.on('close', (code) => {
+      if (code === 0) {
+        const ver = verOut.match(/\d+\.\d+\.\d+/);
+        console.log('[AURA] Hermes Agent найден: v' + (ver ? ver[0] : '?'));
+        // Проверяем обновление (hermes update)
+        const upd = spawn(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', 'hermes update 2>&1'], { windowsHide: true });
+        let updOut = '';
+        upd.stdout.on('data', d => updOut += d.toString());
+        upd.stderr.on('data', d => updOut += d.toString());
+        upd.on('close', () => {
+          if (updOut.includes('updated') || updOut.includes('Updated')) console.log('[AURA] Hermes обновлён');
+          resolve(true);
+        });
+      } else {
+        console.log('[AURA] Hermes Agent не найден — устанавливаю...');
+        const install = spawn(isWin ? 'cmd.exe' : 'sh',
+          [isWin ? '/c' : '-c', 'npm install -g hermes-agent 2>&1'],
+          { windowsHide: true });
+        let installOut = '';
+        install.stdout.on('data', d => installOut += d.toString());
+        install.stderr.on('data', d => installOut += d.toString());
+        install.on('close', (code2) => {
+          if (code2 === 0) {
+            console.log('[AURA] Hermes Agent установлен');
+            resolve(true);
+          } else {
+            console.log('[AURA] Не удалось установить Hermes. Установите вручную: npm install -g hermes-agent');
+            console.log(installOut);
+            resolve(false);
+          }
+        });
+      }
+    });
+  });
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1380,
@@ -68,7 +115,8 @@ function createWindow() {
   win.on('unmaximize', () => win.webContents.send('window:unmaximized'));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await ensureHermes();
   createWindow();
   telegram.restart().catch(() => {});
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -156,6 +204,18 @@ ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
 
 // ---------- Hermes engine: skills, cron, mcp ----------
+ipcMain.handle('hermes:status', async () => {
+  const isWin = process.platform === 'win32';
+  return new Promise(resolve => {
+    const child = require('child_process').spawn(isWin ? 'cmd.exe' : 'sh',
+      [isWin ? '/c' : '-c', 'hermes --version 2>&1'], { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', d => out += d.toString());
+    child.stderr.on('data', d => out += d.toString());
+    child.on('close', (code) => resolve({ ok: code === 0, version: out.trim() }));
+  });
+});
+
 ipcMain.handle('hermes:exec', (_e, { cmd, args: cmdArgs }) => {
   return new Promise((resolve) => {
     const isWin = process.platform === 'win32';

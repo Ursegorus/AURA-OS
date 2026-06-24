@@ -412,6 +412,12 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
   padding: 40px 0;
   font-size: 14px;
 }
+.hermes-engine-status {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.hermes-ok { color: var(--ok); }
+.hermes-err { color: var(--err); }
 
 /* utility */
 .hidden { display: none !important; }

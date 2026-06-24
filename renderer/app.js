@@ -293,6 +293,15 @@ async function loadSettings() {
   $('#set-review').checked = !!state.settings.reviewEnabled;
   // Hermes engine
   $('#set-hermes').checked = !!state.settings.useHermesEngine;
+  // Статус Hermes
+  (async () => {
+    const st = await window.aura.hermesStatus();
+    const el = $('#hermes-status');
+    if (el) {
+      if (st.ok) el.innerHTML = `<span class="hermes-ok">✅ Hermes Agent: ${esc(st.version)}</span>`;
+      else el.innerHTML = `<span class="hermes-err">❌ Hermes Agent не найден. Перезапустите AURA OS для установки.</span>`;
+    }
+  })();
   // AI Free
   $('#set-aifree').checked = !!state.settings.useAIFree;
   $('#set-tg-enabled').checked = !!state.settings.telegramEnabled;
