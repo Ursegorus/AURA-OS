@@ -1,110 +1,82 @@
 # AURA OS — Agentic Unified Runtime Architecture
 
-Скачайте программу, напишите, что нужно сделать — и она выполнит задачу с помощью ИИ.
+Скачали, открыли, написали «сделай лендинг для кафе» — через минуту сайт готов. Ни строчки кода писать не пришлось.
 
-Не требует установки Python, Node.js, ключей API и работы в терминале.
-AURA OS сама установит Node.js и Python при первом запуске — полноценными установщиками (MSI/EXE). Всё будет доступно в системе.
+Не требует установки Python, Node.js, ключей API или работы в терминале. Если чего-то нет — программа скачает и поставит сама.
 
 ---
 
-## Примеры
+## Для кого это
 
-«Сделай лендинг для кафе „У Маши“ с меню и контактами» → AURA OS найдёт примеры в интернете, напишет код и покажет результат.
+**Для тех, кто не умеет программировать.** Хотите сайт, приложение, телеграм-бота — опишите словами, и AURA OS сделает. Не нужно нанимать разработчика и платить тысячи долларов.
 
-«Напиши пост для Telegram о запуске нового продукта» → AURA OS прочитает ваши заметки, найдёт контекст и напишет текст.
+**Для тех, кто устал переключаться между ИИ-инструментами.** Claude Code, Codex, Gemini, OpenCode, Ollama — все в одном окне. AURA OS сама решает, какой агент лучше справится с задачей, и распределяет работу.
 
-«Проверь код в папке /project на ошибки» → AURA OS запустит агентов, найдёт баги и предложит исправления.
+**Для тех, кто ведёт базу знаний.** Если пользуетесь Obsidian — AURA OS читает ваши заметки и находит нужное под каждую задачу. Если Obsidian нет — создаёт свою базу с нуля, с графом связей.
+
+---
+
+## Как это работает
+
+Вы пишете задачу по-русски:
+
+> «Сделай лендинг для кафе, добавь меню, контакты и форму заказа»
+
+AURA OS ищет релевантный контекст в вашей базе знаний, подбирает подходящий AI-движок, запускает агентов и возвращает результат. Всё сохраняется — к этому можно вернуться через неделю и продолжить.
+
+---
+
+## Возможности
+
+- **6 встроенных AI-агентов** — Hermes, Claude Code, OpenCode, Codex, Kimi Code, Ollama. OpenCode работает без ключей и регистрации
+- **База, которая помнит всё** — Obsidian или встроенная, с поиском по всем заметкам и графом связей
+- **Магазин скиллов** — 672 готовых навыка для Hermes, установка в один клик
+- **Управление с телефона** — через Telegram бота: запустил задачу, получил результат, не открывая компьютер
+- **Автоустановка** — при первом запуске скачает Node.js и Python, настроит агентов, создаст базу знаний
 
 ---
 
 ## Как начать
 
-1. Скачайте установщик для вашей системы
-2. Запустите — откроется окно
-3. Напишите задачу — получите результат
-
-[Скачать для Windows](https://github.com/Ursegorus/AURA-OS/releases) · [для Linux](https://github.com/Ursegorus/AURA-OS/releases) · [для macOS](https://github.com/Ursegorus/AURA-OS/releases)
-
-После запуска AURA OS сама установит всё необходимое.
-
----
-
-## Для разработчиков
-
-**Четыре движка оркестрации.** AURA OS объединяет Claude Code, Codex, Gemini, OpenCode, Kimi Code и Ollama. Задачи автоматически распределяются между агентами.
-
-**База знаний.** Поиск по .md файлам через ripgrep. Агенты находят контекст перед выполнением задачи. Работает с Obsidian и без него.
-
-**Граф связей.** Визуализация связей между заметками. Встроен в AURA OS.
-
-**Магазин скиллов.** 672 навыка для Hermes Agent. Установка в один клик.
-
-**Telegram-терминал.** Управление AURA OS с телефона.
-
-**Установщики.**
 ```bash
+# Скачайте установщик для вашей системы со страницы релизов
+# https://github.com/Ursegorus/AURA-OS/releases
+
+# Или соберите из исходников
 npm install
 npm run dist:win    # Windows
 npm run dist:linux  # Linux
+# macOS — через GitHub Actions
 ```
 
-**Системные требования.** Windows 10/11, Linux x64, macOS 12+. 500 МБ на диске.
+После запуска AURA OS сама установит всё необходимое. Никаких консолей, ключей и регистраций.
+
+---
+
+## Системные требования
+
+Windows 10/11 x64, Linux x64, macOS 12+. 500 МБ на диске.
+
+---
+
+## Как появилась
+
+Первый рабочий прототип — 10 минут и один промпт в Claude Cowork на Fable 5. За неделю собрали то, что есть сейчас: Claude Code Opus 4.8 + Hermes Agent. Проект с открытым кодом (MIT).
+
+Ставьте, тестируйте, пишите что не так. Обратная связь — в issues на GitHub.
 
 ---
 
 ## Благодарности
 
-| Проект | Автор |
-|--------|-------|
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Nous Research |
-| [OpenCode](https://github.com/anomalyco/opencode) | Anomaly |
-| [Kimi K2.7 Code](https://github.com/moonshotai/Kimi-K2.7-Code) | Moonshot AI |
-| [Second Brain Kit](https://github.com/vasin-k-i/second-brain-kit) | Константин Васин |
-| [SwarmVault](https://github.com/swarmclawai/swarmvault) | SwarmClaw AI |
-| [Graphify](https://github.com/safishamsi/graphify) | Safi Shamsi |
-| [AI Free](https://github.com/Staks-sor/ai-free) | Staks-sor |
-| [vis-network](https://github.com/visjs/vis-network) | vis.js community |
-
----
-
-AURA OS — проект с открытым кодом (MIT).
+Проект использует идеи и код: Hermes Agent (Nous Research), OpenCode (Anomaly), Kimi K2.7 Code (Moonshot AI), Second Brain Kit (Константин Васин), SwarmVault (SwarmClaw AI), Graphify (Safi Shamsi), AI Free (Staks-sor), vis-network (vis.js community).
 
 [Boosty](https://boosty.to/aura_os)
+
 ---
 
 ## English
 
-**AURA OS — Agentic Unified Runtime Architecture.** Download, type your task, get the result. No API keys, no terminal, no setup required.
-
-### Quick start
-
-1. Download the installer for your platform
-2. Launch AURA OS
-3. Type what you need — get the result
+Download, type your task, get the result. No API keys, no terminal, no setup required. Six built-in AI agents, knowledge base with search and graph, 672 skills, Telegram control. Open source (MIT).
 
 [Download for Windows](https://github.com/Ursegorus/AURA-OS/releases) · [Linux](https://github.com/Ursegorus/AURA-OS/releases) · [macOS](https://github.com/Ursegorus/AURA-OS/releases)
-
-AURA OS installs everything it needs on first launch.
-
-### For developers
-
-**Four orchestration engines.** Combine Claude Code, Codex, Gemini, OpenCode, Kimi Code and Ollama in one interface.
-
-**Knowledge base.** Search across .md files with ripgrep. Agents find relevant context before running tasks. Works with Obsidian and standalone.
-
-**Skills shop.** 672 skills for Hermes Agent. One-click install.
-
-**Telegram terminal.** Control AURA OS from your phone.
-
-**Build from source.**
-```bash
-npm install
-npm run dist:win    # Windows
-npm run dist:linux  # Linux
-```
-
-**Requirements.** Windows 10/11, Linux x64, macOS 12+. 500 MB disk space.
-
-### License
-
-MIT
