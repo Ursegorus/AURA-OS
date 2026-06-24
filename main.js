@@ -93,26 +93,29 @@ async function ensureRuntime() {
     const tmp = path.join(RUNTIME_DIR, 'tmp');
     if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
 
-    let arch = isWin ? 'win-x64' : (isMac ? 'darwin-x64' : 'linux-x64');
-    // Apple Silicon → arm64
-    if (isMac && require('os').arch() === 'arm64') arch = 'darwin-arm64';
-    const ext = isWin ? '.msi' : '.tar.gz';
-    const archiveName = `node-v26.1.0-${arch}${ext}`;
-    const url = `https://nodejs.org/dist/v26.1.0/${archiveName}`;
-    const dest = path.join(tmp, archiveName);
-    
-    await download(url, dest);
-    
     if (isWin) {
-      run(`msiexec /i "${dest}" /quiet /norestart`);
+      // Windows: MSI
+      const installer = path.join(tmp, 'node-v26.1.0-x64.msi');
+      await download('https://nodejs.org/dist/v26.1.0/node-v26.1.0-x64.msi', installer);
+      run(`msiexec /i "${installer}" /quiet /norestart`);
       await new Promise(r => setTimeout(r, 30000));
+      fs.unlinkSync(installer);
+    } else if (isMac) {
+      // macOS: официальный .pkg установщик
+      let arch = require('os').arch() === 'arm64' ? 'arm64' : 'x64';
+      const pkg = `node-v26.1.0-${arch}.pkg`;
+      const dest = path.join(tmp, pkg);
+      await download(`https://nodejs.org/dist/v26.1.0/${pkg}`, dest);
+      run(`sudo installer -pkg "${dest}" -target /`);
+      await new Promise(r => setTimeout(r, 20000));
+      fs.unlinkSync(dest);
     } else {
-      const extractDir = path.join(RUNTIME_DIR, 'node');
-      if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir, { recursive: true });
-      run(`tar -xzf "${dest}" -C "${extractDir}" --strip-components=1`);
-      process.env.PATH = path.join(extractDir, 'bin') + path.delimiter + process.env.PATH;
+      // Linux: через NodeSource + apt
+      console.log('[AURA] Устанавливаю Node.js через NodeSource...');
+      run('curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -');
+      run('sudo apt-get install -y nodejs 2>&1');
+      await new Promise(r => setTimeout(r, 20000));
     }
-    fs.unlinkSync(dest);
     nodeOk = check('node');
     console.log(`[AURA] Node.js: ${nodeOk ? '✓' : '✗'}`);
   } else {
@@ -140,44 +143,24 @@ async function ensureRuntime() {
       run(`"${installer}" /quiet InstallAllUsers=0 PrependPath=1`);
       await new Promise(r => setTimeout(r, 20000));
       fs.unlinkSync(installer);
+    } else if (isMac) {
+      // macOS: официальный .pkg установщик
+      const pkg = 'python-3.12.3-macos11.pkg';
+      const dest = path.join(tmp, pkg);
+      await download(`https://www.python.org/ftp/python/3.12.3/${pkg}`, dest);
+      run(`sudo installer -pkg "${dest}" -target /`);
+      await new Promise(r => setTimeout(r, 20000));
+      fs.unlinkSync(dest);
     } else {
-      // Linux/macOS: устанавливаем uv, затем uv python install
-      console.log('[AURA] Устанавливаю uv (менеджер Python)...');
-      run('curl -LsSf https://astral.sh/uv/install.sh | sh');
-      // uv ставится в ~/.cargo/bin/ или ~/.local/bin/
-      const uvPaths = [
-        path.join(require('os').homedir(), '.cargo', 'bin'),
-        path.join(require('os').homedir(), '.local', 'bin')
-      ];
-      for (const p of uvPaths) {
-        if (fs.existsSync(path.join(p, 'uv'))) {
-          process.env.PATH = p + path.delimiter + process.env.PATH;
-          break;
-        }
-      }
-      // Проверяем что uv работает
-      const uvOk = check('uv');
-      if (uvOk) {
-        console.log('[AURA] Устанавливаю Python через uv...');
-        run('uv python install 3.12 2>&1');
-        // uv добавляет Python в PATH сам, но на всякий случай
-        await new Promise(r => setTimeout(r, 10000));
-      } else {
-        console.log('[AURA] uv не установился. Пробую pyenv...');
-        run('curl https://pyenv.run | bash');
-        const pyenvPaths = [
-          path.join(require('os').homedir(), '.pyenv', 'bin'),
-          path.join(require('os').homedir(), '.pyenv', 'shims')
-        ];
-        for (const p of pyenvPaths) {
-          if (fs.existsSync(p)) process.env.PATH = p + path.delimiter + process.env.PATH;
-        }
-        if (check('pyenv')) {
-          run('pyenv install 3.12.3 2>&1');
-          run('pyenv global 3.12.3 2>&1');
-          await new Promise(r => setTimeout(r, 30000));
-        }
-      }
+      // Linux: через deadsnakes PPA + apt
+      console.log('[AURA] Устанавливаю Python через deadsnakes...');
+      run('sudo add-apt-repository -y ppa:deadsnakes/ppa 2>&1');
+      run('sudo apt-get update -qq 2>&1');
+      run('sudo apt-get install -y python3.12 python3.12-pip python3.12-venv 2>&1');
+      // Создаём симлинк python → python3.12 если нет
+      run('sudo ln -sf /usr/bin/python3.12 /usr/local/bin/python 2>&1');
+      run('sudo ln -sf /usr/bin/pip3.12 /usr/local/bin/pip 2>&1');
+      await new Promise(r => setTimeout(r, 15000));
     }
     pythonOk = check('python') || check('python3');
     console.log(`[AURA] Python: ${pythonOk ? '✓' : '✗'}`);
