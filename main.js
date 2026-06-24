@@ -65,40 +65,46 @@ async function ensureRuntime() {
     } catch (_) { return false; }
   }
 
-  // Функция установки: скачать zip/msi, распаковать, добавить PATH
+  // Функция установки: скачать и установить нормальным установщиком
   async function install(platform, version, label) {
     console.log(`[AURA] ${label} не найден — устанавливаю...`);
-    const dir = path.join(RUNTIME_DIR, platform);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const tmpDir = path.join(RUNTIME_DIR, 'tmp');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
-    const url = platform === 'node'
-      ? `https://nodejs.org/dist/v${version}/node-v${version}-win-x64.zip`
-      : `https://www.python.org/ftp/python/${version}/python-${version}-embed-amd64.zip`;
+    const isNode = platform === 'node';
+    const exeName = isNode ? `node-v${version}-x64.msi` : `python-${version}-amd64.exe`;
+    const url = isNode
+      ? `https://nodejs.org/dist/v${version}/${exeName}`
+      : `https://www.python.org/ftp/python/${version}/${exeName}`;
+    const installerPath = path.join(tmpDir, exeName);
 
-    const zipPath = path.join(RUNTIME_DIR, `${platform}.zip`);
     // Скачиваем
+    console.log(`[AURA] Скачиваю ${label}...`);
     await new Promise((resolve, reject) => {
-      const file = fs.createWriteStream(zipPath);
+      const file = fs.createWriteStream(installerPath);
       http.get(url, (res) => {
         if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
         res.pipe(file);
         file.on('finish', () => { file.close(); resolve(); });
       }).on('error', reject);
     });
-    // Распаковываем (через powershell Expand-Archive на Windows)
-    const psCmd = `powershell -c "Expand-Archive -Path '${zipPath}' -DestinationPath '${dir}' -Force"`;
-    spawnSync(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', psCmd], { windowsHide: true });
-    fs.unlinkSync(zipPath);
 
-    // Добавляем в PATH для этого процесса
-    const extracted = platform === 'node'
-      ? path.join(dir, `node-v${version}-win-x64`)
-      : dir;
-    process.env.PATH = extracted + path.delimiter + process.env.PATH;
+    // Устанавливаем
+    console.log(`[AURA] Устанавливаю ${label}...`);
+    const installCmd = isNode
+      ? `msiexec /i "${installerPath}" /quiet /norestart`
+      : `"${installerPath}" /quiet InstallAllUsers=0 PrependPath=1`;
+    
+    spawnSync(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', installCmd], { windowsHide: true, timeout: 120000 });
+    // Ждём завершения установки (msiexec асинхронный)
+    await new Promise(r => setTimeout(r, isNode ? 30000 : 15000));
+    fs.unlinkSync(installerPath);
 
     // Проверка
-    console.log(`[AURA] ${label} установлен: ${extracted}`);
-    return check(platform === 'node' ? 'node' : 'python');
+    const checkCmd = isNode ? 'node' : 'python';
+    const ok = check(checkCmd);
+    console.log(`[AURA] ${label} установка: ${ok ? '✓' : '✗'}`);
+    return ok;
   }
 
   // Проверяем Node.js
