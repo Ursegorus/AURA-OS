@@ -19,3 +19,4 @@ Thumbs.db
 # Local settings / secrets (never commit Telegram tokens etc.)
 aura-settings.json
 *.local
+PERSONAS.md
