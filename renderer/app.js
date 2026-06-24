@@ -173,6 +173,32 @@ async function loadAgents() {
   state.agents = await window.aura.agents.list();
   const available = state.agents.filter(a => a.available).length;
   $('#agent-count').textContent = available;
+
+  if (available === 0) {
+    $('#agents-grid').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">⬡</div>
+        <h3>У вас нет установленных AI-агентов</h3>
+        <p class="hint">Нажмите «Установить» рядом с OpenCode — получите бесплатного AI-помощника с открытым кодом. Никаких регистраций и ключей.</p>
+        <button class="btn primary" id="btn-install-opencode">⚡ Установить OpenCode</button>
+      </div>`;
+    const btn = document.getElementById('btn-install-opencode');
+    if (btn) {
+      btn.addEventListener('click', async function() {
+        this.disabled = true;
+        this.textContent = '⏳ Установка...';
+        const res = await window.aura.agentsInstall({ command: 'opencode-ai@latest' });
+        if (res.ok) {
+          this.textContent = '✅ Установлено!';
+          setTimeout(() => loadAgents(), 2000);
+        } else {
+          this.textContent = '✗ Ошибка. Установите Node.js и попробуйте снова.';
+        }
+      });
+    }
+    return;
+  }
+
   $('#agents-grid').innerHTML = state.agents.map(a => `
     <div class="agent-card">
       <div class="agent-top">
@@ -188,6 +214,7 @@ async function loadAgents() {
       <div class="agent-foot">
         <label class="switch"><input type="checkbox" data-toggle="${a.id}" ${a.enabled ? 'checked' : ''}/> ${t('agent_enabled')}</label>
         ${a.builtin ? '' : `<button class="btn danger" data-del="${a.id}">${t('delete')}</button>`}
+        ${!a.available && a.installHint ? `<button class="btn primary btn-install-agent" data-cmd="${esc(a.installHint)}">⚡ Установить</button>` : ''}
       </div>
     </div>`).join('');
 
@@ -196,6 +223,20 @@ async function loadAgents() {
   $$('[data-del]').forEach(el => el.addEventListener('click', async () => {
     await window.aura.agents.remove(el.dataset.del);
     loadAgents();
+  }));
+  // One-click install
+  $$('.btn-install-agent').forEach(el => el.addEventListener('click', async function() {
+    const cmd = this.dataset.cmd;
+    this.disabled = true;
+    this.textContent = '⏳...';
+    const res = await window.aura.agentsInstall({ command: cmd });
+    if (res.ok) {
+      this.textContent = '✅';
+      setTimeout(() => loadAgents(), 2000);
+    } else {
+      this.textContent = '✗ Ошибка';
+      setTimeout(() => { this.textContent = '⚡ Установить'; this.disabled = false; }, 3000);
+    }
   }));
 }
 

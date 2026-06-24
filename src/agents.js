@@ -98,6 +98,20 @@ const BUILTIN_AGENTS = [
     roles: ['coder', 'reviewer', 'researcher'],
     color: '#6366f1',
     builtin: true
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    vendor: 'Anomaly',
+    command: 'opencode',
+    args: ['run', '{prompt}'],
+    needsShell: false,
+    detectArgs: ['--version'],
+    installHint: 'opencode-ai@latest',
+    skills: ['coding', 'architecture', 'refactoring', 'planning', 'code-review', 'debugging', 'testing'],
+    roles: ['coder', 'reviewer', 'researcher', 'coordinator'],
+    color: '#22c55e',
+    builtin: true
   }
 ];
 

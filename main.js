@@ -100,6 +100,20 @@ ipcMain.handle('agents:toggle', (_e, { id, enabled }) => {
   store.set('enabledAgents', map);
 });
 
+ipcMain.handle('agents:install', async (_e, { command }) => {
+  return new Promise(resolve => {
+    // Пробуем npm install -g, если не сработает — pip install
+    const cmd = `npm install -g ${command}`;
+    const child = require('child_process').spawn(process.platform === 'win32' ? 'cmd.exe' : 'sh', 
+      [process.platform === 'win32' ? '/c' : '-c', cmd],
+      { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', d => { out += d.toString(); });
+    child.stderr.on('data', d => { out += d.toString(); });
+    child.on('close', (code) => resolve({ ok: code === 0, output: out.trim(), code }));
+  });
+});
+
 ipcMain.handle('task:start', (_e, input) => orchestrator.startTask(input));
 ipcMain.handle('task:cancel', (_e, id) => orchestrator.cancelTask(id));
 ipcMain.handle('task:list', () => orchestrator.listTasks());

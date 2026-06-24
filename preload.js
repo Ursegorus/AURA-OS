@@ -44,5 +44,6 @@ contextBridge.exposeInMainWorld('aura', {
   skillsInstall: (id) => ipcRenderer.invoke('skills:install', id),
   aifreeToggle: (enabled) => ipcRenderer.invoke('aifree:toggle', enabled),
   aifreePing: () => ipcRenderer.invoke('aifree:ping'),
-  shellOpenExternal: (url) => ipcRenderer.invoke('shell:openExternal', url)
+  shellOpenExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  agentsInstall: (opts) => ipcRenderer.invoke('agents:install', opts)
 });
