@@ -252,6 +252,8 @@ async function loadSettings() {
   $('#set-review').checked = !!state.settings.reviewEnabled;
   // Hermes engine
   $('#set-hermes').checked = !!state.settings.useHermesEngine;
+  // AI Free
+  $('#set-aifree').checked = !!state.settings.useAIFree;
   $('#set-tg-enabled').checked = !!state.settings.telegramEnabled;
   $('#set-tg-token').value = state.settings.telegramToken || '';
   $('#set-tg-allowed').value = state.settings.telegramAllowed || '';
@@ -292,6 +294,7 @@ $('#btn-save-settings').addEventListener('click', async () => {
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,
     reviewEnabled: $('#set-review').checked,
     useHermesEngine: $('#set-hermes').checked,
+    useAIFree: $('#set-aifree').checked,
     telegramEnabled: $('#set-tg-enabled').checked,
     telegramToken: $('#set-tg-token').value.trim(),
     telegramAllowed: $('#set-tg-allowed').value.trim(),
@@ -304,6 +307,21 @@ $('#btn-save-settings').addEventListener('click', async () => {
   renderTasks();
   $('#settings-saved').textContent = t('saved');
   setTimeout(() => { $('#settings-saved').textContent = ''; }, 2000);
+});
+
+// AI Free: toggle провайдера при переключении
+$('#set-aifree').addEventListener('change', async function() {
+  await window.aura.aifreeToggle({ enabled: this.checked });
+  const ping = await window.aura.aifreePing();
+  if (this.checked && !ping.ok) {
+    alert('AI Free API не отвечает на localhost:4318.\nЗапустите npm run api в папке ai-free.');
+  }
+});
+
+// Ссылка на репозиторий AI Free
+$('#aifree-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  window.aura.shellOpenExternal('https://github.com/Staks-sor/ai-free');
 });
 
 /* ---------- Hermes engine panel ---------- */

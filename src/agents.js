@@ -85,6 +85,19 @@ const BUILTIN_AGENTS = [
     roles: ['coder', 'writer'],
     color: '#94a3b8',
     builtin: true
+  },
+  {
+    id: 'kimi-code',
+    name: 'Kimi Code',
+    vendor: 'Moonshot AI',
+    command: 'kimi',
+    args: ['code', '--prompt', '{prompt}'],
+    needsShell: false,
+    detectArgs: ['--version'],
+    skills: ['coding', 'architecture', 'refactoring', 'planning', 'web-search', 'analysis'],
+    roles: ['coder', 'reviewer', 'researcher'],
+    color: '#6366f1',
+    builtin: true
   }
 ];
 

@@ -116,7 +116,10 @@ ipcMain.handle('settings:get', () => ({
   telegramToken: store.get('telegramToken', ''),
   telegramAllowed: store.get('telegramAllowed', ''),
   // Hermes engine
-  useHermesEngine: store.get('useHermesEngine', false)
+  useHermesEngine: store.get('useHermesEngine', false),
+  // AI Free
+  useAIFree: store.get('useAIFree', false),
+  aifreePath: store.get('aifreePath', '')
 }));
 ipcMain.handle('settings:set', (_e, patch) => {
   const tgKeys = ['telegramEnabled', 'telegramToken', 'telegramAllowed'];
@@ -136,6 +139,7 @@ ipcMain.handle('memory:openVault', () => {
   if (memory.isConfigured()) shell.openPath(memory.vaultPath());
 });
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
+ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
 
 // ---------- Hermes engine: skills, cron, mcp ----------
 ipcMain.handle('hermes:exec', (_e, { cmd, args: cmdArgs }) => {
@@ -165,6 +169,39 @@ ipcMain.handle('skills:inspect', async (_e, id) => {
 
 ipcMain.handle('skills:install', async (_e, id) => {
   return _hermesExec(['-p', 'aura-os', 'skills', 'install', id]);
+});
+
+// ---------- AI Free ----------
+/** Включить/выключить AI Free провайдер. */
+ipcMain.handle('aifree:toggle', async (_e, { enabled }) => {
+  store.set('useAIFree', enabled);
+  if (enabled) {
+    // Устанавливаем AI Free как провайдера для Hermes
+    await _hermesExec(['config', 'set', 'model.base_url', 'http://localhost:4318/v1']);
+    // AI Free использует DeepSeek — подставляем заглушку ключа (не нужен для localhost)
+    await _hermesExec(['config', 'set', 'model.api_key', 'sk-aifree-local']);
+    await _hermesExec(['config', 'set', 'model.default', 'deepseek-chat']);
+  } else {
+    // Сбрасываем
+    await _hermesExec(['config', 'set', 'model.base_url', '']);
+    await _hermesExec(['config', 'set', 'model.api_key', '']);
+    await _hermesExec(['config', 'set', 'model.default', '']);
+  }
+  return { ok: true };
+});
+
+/** Проверить, отвечает ли AI Free API. */
+ipcMain.handle('aifree:ping', async () => {
+  const http = require('http');
+  return new Promise(resolve => {
+    const req = http.get('http://localhost:4318/v1/models', (res) => {
+      let body = '';
+      res.on('data', d => body += d);
+      res.on('end', () => resolve({ ok: res.statusCode === 200, output: body.slice(0, 200) }));
+    });
+    req.on('error', () => resolve({ ok: false, output: 'AI Free not running' }));
+    req.setTimeout(3000, () => { req.destroy(); resolve({ ok: false, output: 'timeout' }); });
+  });
 });
 
 /** Helper: run a hermes command and return { ok, output, code }. */

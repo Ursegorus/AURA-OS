@@ -41,5 +41,8 @@ contextBridge.exposeInMainWorld('aura', {
   hermesSyncToObsidian: () => ipcRenderer.invoke('hermes:syncToObsidian'),
   skillsSearch: (opts) => ipcRenderer.invoke('skills:search', opts),
   skillsInspect: (id) => ipcRenderer.invoke('skills:inspect', id),
-  skillsInstall: (id) => ipcRenderer.invoke('skills:install', id)
+  skillsInstall: (id) => ipcRenderer.invoke('skills:install', id),
+  aifreeToggle: (enabled) => ipcRenderer.invoke('aifree:toggle', enabled),
+  aifreePing: () => ipcRenderer.invoke('aifree:ping'),
+  shellOpenExternal: (url) => ipcRenderer.invoke('shell:openExternal', url)
 });
