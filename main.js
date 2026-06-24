@@ -28,8 +28,11 @@ let win = null;
 const store = new Store();
 const agents = new AgentManager(store);
 const memory = new Memory(store);
-// Инициализация типовой структуры Second Brain при первом запуске
-memory.initTemplate();
+// Аудит базы знаний — дополнить типовой структурой, если не хватает
+const audit = memory.auditTemplate();
+if (audit.updated) {
+  console.log('[AURA] База знаний дополнена типовой структурой: ' + audit.files_added.join(', '));
+}
 
 // Fan out orchestrator events to both the UI and the Telegram terminal.
 function dispatchEvent(event) {
@@ -209,8 +212,8 @@ ipcMain.handle('memory:openVault', () => {
 ipcMain.handle('memory:getGraphHTML', () => {
   return memory.getGraphHTML();
 });
-ipcMain.handle('memory:initTemplate', () => {
-  return memory.initTemplate();
+ipcMain.handle('memory:auditTemplate', () => {
+  return memory.auditTemplate();
 });
 ipcMain.handle('memory:tree', async (_e, dir) => {
   const base = dir || memory.basePath();

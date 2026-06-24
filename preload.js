@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld('aura', {
     read: (p) => ipcRenderer.invoke('memory:read', p),
     openVault: () => ipcRenderer.invoke('memory:openVault'),
     getGraphHTML: () => ipcRenderer.invoke('memory:getGraphHTML'),
-    initTemplate: () => ipcRenderer.invoke('memory:initTemplate'),
+    auditTemplate: () => ipcRenderer.invoke('memory:auditTemplate'),
     tree: (dir) => ipcRenderer.invoke('memory:tree', dir)
   },
   telegram: {

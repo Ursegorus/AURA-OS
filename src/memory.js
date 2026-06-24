@@ -151,46 +151,57 @@ class Memory {
       return [...new Set(words.map(w => w.toLowerCase()))].filter(w => w.length > 2 && !stop.includes(w)).slice(0, 8);
     }
 
-    /** Инициализировать типовую структуру Second Brain (шаблон Васина). */
-    initTemplate() {
-      const base = this.basePath();
-      if (!base) return false;
-      // Проверяем, есть ли уже структура
-      if (fs.existsSync(path.join(base, '_BRAIN', 'INDEX.md'))) return false;
+  /** Проверить базу знаний и дополнить типовой структурой (если нужно).
+   *  Возвращает {updated, files_added, files_existing}. Никогда не перезаписывает. */
+  auditTemplate() {
+    const base = this.basePath();
+    if (!base) return { updated: false, files_added: [], files_existing: [] };
 
-      const dirs = [
-        '_BRAIN/Заметки', '_BRAIN/Решения', '_BRAIN/Выводы',
-        '_BRAIN/Стратегии', '_BRAIN/Архив', 'Проекты'
-      ];
-      for (const d of dirs) fs.mkdirSync(path.join(base, d), { recursive: true });
+    const TEMPLATE = {
+      '_BRAIN/INDEX.md': `# INDEX — карта хранилища\n\nИсточник истины по структуре.\n\n## Tier 1 — читать всегда\n- \`CONTEXT.md\` — фокус\n- \`STATE.md\` — состояние\n- \`PROJECTS.md\` — канбан\n\n## Tier 2 — по задаче\n- Проект → \`Проекты/[имя]/README.md\`\n- grep по тегу \`#тема\`\n\n## Tier 3 — игнор\n- \`Архив/\`, выводы >30 дней\n`,
+      '_BRAIN/CONTEXT.md': '# Контекст\n\n## Кто я\n[2–4 предложения]\n\n## Что делаю сейчас\n[главный фокус]\n\n## Активные проекты\n- [проект] → [цель]\n',
+      '_BRAIN/STATE.md': '# Текущее состояние\n\n## Фокус недели\n\n## Последние изменения\n\n## Блокеры\n',
+      '_BRAIN/PROJECTS.md': '# ПРОЕКТЫ (Канбан)\n\nСтатусы: 🔴 Идея | 🟡 План | 🟢 Актив | ⏸ Пауза | ✅ Закрыт\n---\n## 🟢 Активные\n\n## 🟡 Планирование\n',
+      '_BRAIN/MEMORY.md': '# Память (индекс)\n\n- ...\n',
+      '_BRAIN/Заметки/README.md': '# Заметки\nФормат: первая строка теги `#источник #тема`, резюме, содержание.\n',
+      '_BRAIN/Решения/README.md': '# Решения (ADR)\nФормат: In context of X, facing Y, we chose Z to achieve W, accepting V.\n',
+      '_BRAIN/Выводы/README.md': '# Выводы из сессий\nФормат: дата / что сделали / что решили /下一步.\n',
+      '_BRAIN/Стратегии/README.md': '# Стратегии\nv1, v2... Первая строка: # АКТУАЛЬНАЯ или # АРХИВ.\n',
+      '_BRAIN/Архив/README.md': '# Архив\nФайлы старше 30 дней. Только по запросу.\n',
+      'README.md': `# База знаний\n\nСоздано AURA OS.\nСтруктура: [Second Brain Kit](https://github.com/vasin-k-i/second-brain-kit) (Константин Васин)\n`,
+      'Проекты/README.md': '# Проекты\n\nПо одному README.md на проект.\n'
+    };
 
-      const files = {
-        '_BRAIN/INDEX.md': `# INDEX — карта хранилища\n\nИсточник истины по структуре. Обновлять при добавлении/удалении крупных папок.\n\n## Tier 1 — читать всегда при старте сессии\n- \`CONTEXT.md\` — текущий фокус\n- \`STATE.md\` — состояние дел\n- \`PROJECTS.md\` — канбан проектов\n\n## Tier 2 — по задаче\n- Проект → \`Проекты/[имя]/README.md\` сначала\n- Заметки по теме → grep по тегу \`#тема\`\n- Решения → \`Решения/\`\n\n## Tier 3 — игнорировать без просьбы\n- \`Архив/\`, выводы старше 30 дней\n`,
+    const added = [];
+    const existing = [];
 
-        '_BRAIN/CONTEXT.md': `# Контекст\n\n## Кто я\n[2–4 предложения о себе]\n\n## Что делаю сейчас\n[главный фокус]\n\n## Активные проекты\n- [Проект 1] → [цель]\n- [Проект 2] → [цель]\n\n## Стиль работы\n[как удобно работать с AI]\n`,
-
-        '_BRAIN/STATE.md': `# Текущее состояние\n\nОбновляется в конце каждой сессии.\n\n## Фокус недели\n\n## Последние изменения\n\n## Блокеры\n`,
-
-        '_BRAIN/PROJECTS.md': `# ПРОЕКТЫ (Канбан)\n\nСтатусы: 🔴 Идея | 🟡 Планирование | 🟢 Активен | ⏸ Пауза | ✅ Закрыт\n\n---\n\n## 🟢 Активные\n\n*(добавьте свои проекты)*\n\n---\n\n## 🟡 Планирование\n\n---\n\n## 🔴 Идеи\n\n---\n\n## ⏸ Пауза\n\n---\n\n## ✅ Закрытые\n`,
-
-        '_BRAIN/MEMORY.md': `# Память (индекс)\n\nХранилище доменной памяти. Каждая запись — ссылка на файл с итогом.\n\n-  ...\n`,
-
-        '_BRAIN/Заметки/README.md': `# Заметки\n\nКатегории:\n- Общее/\n- [домен]/\n\nФормат: первая строка — теги \`#источник #тема\`, потом резюме, потом содержание.\n`,
-
-        '_BRAIN/Решения/README.md': `# Решения (ADR)\n\nФормат Y-statement:\n«In context of X, facing Y, we chose Z to achieve W, accepting V»\n\nСтатусы: proposed | accepted | superseded | deprecated\n`,
-
-        '_BRAIN/Выводы/README.md': `# Выводы из сессий\n\nФормат:\n- Дата\n- Что сделали / что решили / следующие шаги\n`,
-
-        'README.md': `# База знаний\n\nСоздано AURA OS.\n\nСтруктура: [Second Brain Kit](https://github.com/vasin-k-i/second-brain-kit)\nАвтор метода: Константин Васин\n`
-      };
-
-      for (const [rel, content] of Object.entries(files)) {
-        fs.writeFileSync(path.join(base, rel), content, 'utf8');
+    // Папки
+    const allDirs = ['_BRAIN/Заметки', '_BRAIN/Решения', '_BRAIN/Выводы',
+      '_BRAIN/Стратегии', '_BRAIN/Архив', 'Проекты'];
+    for (const d of allDirs) {
+      const full = path.join(base, d);
+      if (!fs.existsSync(full)) {
+        fs.mkdirSync(full, { recursive: true });
+        added.push(d + '/');
+      } else {
+        existing.push(d + '/');
       }
-
-      return true;
     }
 
+    // Файлы — только если не существуют
+    for (const [rel, content] of Object.entries(TEMPLATE)) {
+      const full = path.join(base, rel);
+      if (!fs.existsSync(full)) {
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, content, 'utf8');
+        added.push(rel);
+      } else {
+        existing.push(rel);
+      }
+    }
+
+    return { updated: added.length > 0, files_added: added, files_existing: existing };
+  }
   /** Записать/создать .md в vault. */
   writeNote(relativePath, content) {
     const full = path.resolve(path.join(this.basePath(), relativePath));
