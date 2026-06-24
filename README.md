@@ -1,54 +1,60 @@
 # AURA OS
 
-**Agentic Unified Runtime Architecture** — десктоп-приложение, которое само решает ваши задачи с помощью ИИ. Вы пишете, что нужно сделать — AURA OS находит ответ, пишет код, ищет информацию, исправляет ошибки и сохраняет результат.
+Десктоп-приложение, которое выполняет задачи с помощью ИИ. Вы описываете, что нужно сделать — AURA OS сама находит ответ, пишет код, собирает контекст из базы знаний и сохраняет результат.
 
-Не требует открывать терминал, настраивать API-ключи и разбираться в ИИ-инструментах.
+Не требует настроек, API-ключей и работы в терминале.
 
 ---
 
-## Чем полезна
+## Для кого
 
-**Для тех, кто не хочет разбираться в терминале**
-Установили — открыли — написали задачу — получили результат. AURA OS сама устанавливает и настраивает Hermes Agent, OpenCode и другие ИИ-агенты. Никаких консолей, ключей и регистраций.
+**Для тех, кто не хочет разбираться в терминале.** Установили — открыли — написали задачу — получили результат. AURA OS сама устанавливает Hermes Agent, OpenCode и других агентов. Никаких консолей, ключей и регистраций.
 
-**Для тех, у кого уже есть ИИ-инструменты**
-AURA OS объединяет Claude Code, Codex, Gemini, Ollama, Kimi Code и OpenCode в одной программе. Не нужно переключаться между окнами — AURA сама распределяет задачи между агентами.
+**Для тех, у кого уже есть ИИ-инструменты.** AURA OS объединяет Claude Code, Codex, Gemini, OpenCode, Kimi Code и Ollama в одной программе. Не нужно переключаться между окнами.
 
-**Для тех, кто ведёт базу знаний**
-При первом запуске AURA OS создаёт типовую структуру Second Brain по [методу Васина Константина](https://github.com/vasin-k-i/second-brain-kit). Работает с Obsidian и без него.
+**Для тех, кто ведёт базу знаний.** При первом запуске AURA OS создаёт структуру для заметок, проектов и решений. Работает с Obsidian и без него.
+
+---
+
+## Как работает
+
+```
+Пользователь пишет задачу → AURA OS ищет контекст в базе знаний →
+выбирает подходящий движок → агенты выполняют → результат сохраняется
+```
+
+AURA OS сама решает, какой движок использовать:
+
+| Движок | Когда подходит |
+|--------|----------------|
+| **Hermes Agent** | Нужны навыки, cron, MCP. Требует API-ключ |
+| **Claude Code** | У пользователя есть подписка Claude |
+| **OpenCode** | Нет ключей — бесплатные модели внутри |
+| **Встроенный** | Если ничего другого нет |
+
+По умолчанию AURA OS выбирает движок сама: от самого мощного к самому доступному.
 
 ---
 
 ## Возможности
 
-**Четыре движка оркестрации**
-- **Auto** — сам выбирает лучший доступный: Hermes → Claude Code → OpenCode → встроенный
-- **Hermes Agent** — полный AI-агент с навыками, памятью, cron-задачами и MCP. Нужен API-ключ
-- **Claude Code** — для пользователей Claude с подпиской
-- **OpenCode** — бесплатный движок без ключей. Работает сразу после установки
+**База знаний.** Поиск по заметкам через ripgrep. Перед выполнением задачи AURA OS находит нужные файлы и подкладывает их как контекст. Никакой индексации — поиск работает сразу.
 
-**Встроенная база знаний (Second Brain)**
-- Типовая структура `_BRAIN/` — INDEX, CONTEXT, PROJECTS, MEMORY, ADR, стратегии, заметки
-- Поиск через ripgrep — агенты находят релевантный контекст перед выполнением
-- Граф связей с интерактивной визуализацией (vis-network)
-- Редактор .md прямо в AURA OS
-- Полная совместимость с Obsidian — одни и те же файлы
+**Граф связей.** Показывает, какие заметки связаны между собой. Встроен в AURA OS — не открывает браузер.
 
-**Магазин скиллов**
-672+ готовых навыков для Hermes Agent — от code-review до Google Workspace. Установка в один клик.
+**Магазин скиллов.** 672 готовых навыка для Hermes Agent. Установка в один клик.
 
-**Telegram-терминал**
-Управляйте AURA OS с телефона: запускайте задачи, смотрите статус, выполняйте команды.
+**Telegram-терминал.** Запускайте задачи с телефона.
 
-**Авто-установка агентов**
-Hermes Agent устанавливается при первом запуске. OpenCode, Kimi Code, Claude Code, Codex — в один клик из UI.
+**Установка агентов в один клик.** Hermes Agent устанавливается при первом запуске. OpenCode, Kimi Code, Claude Code, Codex — кнопкой в разделе «Агенты».
 
-**One-click на любую платформу**
-Установщики для Windows (.exe), Linux (.AppImage, .deb) и macOS (.dmg) собираются через GitHub Actions.
+**Авто-дополнение базы знаний.** Если у вас уже есть заметки, AURA OS проверит, каких папок не хватает, и добавит их, не трогая существующие файлы.
+
+**Готовые установщики.** Windows (.exe), Linux (.AppImage, .deb), macOS (.dmg) собираются через GitHub Actions.
 
 ---
 
-## Как начать
+## Быстрый старт
 
 ```bash
 # Скачайте установщик со страницы релизов
@@ -58,44 +64,36 @@ Hermes Agent устанавливается при первом запуске. 
 npm install
 npm run dist:win    # Windows
 npm run dist:linux  # Linux
-# macOS — через GitHub Actions или `npx electron-builder --mac --publish never`
+# macOS — через GitHub Actions
 ```
 
 ---
 
 ## Системные требования
 
-- Windows 10/11 x64, Linux x64 или macOS 12+
+- Windows 10/11, Linux x64, macOS 12+
 - Node.js 18+ (для установки CLI-агентов)
-- 500 МБ свободного места
+- 500 МБ на диске
 
 ---
 
-## Благодарности и источники
+## Благодарности
 
-AURA OS построена на идеях и коде открытых проектов:
+AURA OS использует идеи и код открытых проектов:
 
-| Проект | Автор | Что использовано |
-|--------|-------|-----------------|
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Nous Research | Основной AI-движок, архитектура агента, skills, MCP |
-| [OpenCode](https://github.com/anomalyco/opencode) | Anomaly | Бесплатный CLI-агент для пользователей без API-ключей |
-| [Kimi Code](https://github.com/moonshotai/Kimi-K2.7-Code) | Moonshot AI | Open-source модель кодирования MoE 1T |
-| [Second Brain Kit](https://github.com/vasin-k-i/second-brain-kit) | Константин Васин | Типовая структура базы знаний _BRAIN/, мост памяти, метод ведения проектов |
-| [SwarmVault](https://github.com/swarmclawai/swarmvault) | SwarmClaw AI | Концепция knowledge graph и MCP-сервера для базы знаний |
-| [Graphify](https://github.com/safishamsi/graphify) | Safi Shamsi | Референс построения графа зависимостей кода (71k⭐) |
-| [AI Free](https://github.com/Staks-sor/ai-free) | Staks-sor | Бесплатный API через браузерную автоматизацию |
-| [vis-network](https://github.com/visjs/vis-network) | vis.js community | Библиотека визуализации графа связей |
+| Проект | Автор |
+|--------|-------|
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Nous Research |
+| [OpenCode](https://github.com/anomalyco/opencode) | Anomaly |
+| [Kimi K2.7 Code](https://github.com/moonshotai/Kimi-K2.7-Code) | Moonshot AI |
+| [Second Brain Kit](https://github.com/vasin-k-i/second-brain-kit) | Константин Васин |
+| [SwarmVault](https://github.com/swarmclawai/swarmvault) | SwarmClaw AI |
+| [Graphify](https://github.com/safishamsi/graphify) | Safi Shamsi |
+| [AI Free](https://github.com/Staks-sor/ai-free) | Staks-sor |
+| [vis-network](https://github.com/visjs/vis-network) | vis.js community |
 
 ---
 
-## Поддержать проект
-
-AURA OS — бесплатный проект с открытым кодом (MIT).
+AURA OS — проект с открытым кодом (MIT).
 
 [Boosty](https://boosty.to/aura_os)
-
----
-
-## Лицензия
-
-MIT — подробнее в [LICENSE](LICENSE).
