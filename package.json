@@ -16,6 +16,7 @@
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:linux": "electron-builder --linux --publish never",
+    "check": "node --check main.js && node --check preload.js && node --check src/harness.js && node --check src/orchestrator.js && node --check src/agents.js && node --check src/memory.js && node --check src/telegram.js && node --check renderer/app.js && node --check renderer/i18n.js",
     "pack": "electron-builder --dir"
   },
   "devDependencies": {
