@@ -35,9 +35,9 @@
       "preload.js",
       "src/**/*",
       "renderer/**/*",
-      "node_modules/aura-pro/**/*",
       "!**/*.map"
     ],
+    "afterPack": "build/afterPack.js",
     "win": {
       "target": [
         {

@@ -25,11 +25,22 @@ const IS_WIN = process.platform === 'win32';
 let _proCache;
 function loadPro() {
   if (_proCache !== undefined) return _proCache;
+  _proCache = null;
+  // 1) обычный путь — пакет в node_modules (dev / npm install aura-pro)
+  // 2) бандл — extraResources в собранном приложении (<resources>/aura-pro)
+  const candidates = ['aura-pro'];
   try {
-    _proCache = require('aura-pro');
-    if (_proCache && typeof _proCache.activate === 'function') _proCache.activate();
-  } catch (_) {
-    _proCache = null;
+    if (process.resourcesPath) {
+      // extraResources копирует node_modules/aura-pro → <resources>/node_modules/aura-pro
+      candidates.push(path.join(process.resourcesPath, 'node_modules', 'aura-pro'));
+      candidates.push(path.join(process.resourcesPath, 'aura-pro'));
+    }
+  } catch (_) {}
+  for (const c of candidates) {
+    try {
+      const mod = require(c);
+      if (mod) { _proCache = mod; if (typeof mod.activate === 'function') mod.activate(); break; }
+    } catch (_) { /* try next */ }
   }
   return _proCache;
 }
