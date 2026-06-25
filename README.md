@@ -103,11 +103,15 @@ No need to install Python, Node.js, API keys or work in a terminal. If something
 
 ### Features
 
+- **Dynamic harness** — AURA builds the harness for each task: the orchestration pattern (single / loop / fan-out / adversarial / tournament / …), loops and verification. State lives in files, not the model context. Details → [docs/HARNESS.ru.md](docs/HARNESS.ru.md)
+- **Ralph Loop** — the agent moves toward the goal step by step until done, with backpressure (test command) and phased autonomy
 - **6 built-in AI agents** — Hermes, Claude Code, OpenCode, Codex, Kimi Code, Ollama. OpenCode works without keys or signup
-- **Knowledge base that remembers** — Obsidian or built-in, with full-text search and a connection graph
+- **Knowledge base that remembers** — Obsidian or built-in, with full-text search and a connection graph. `CONSTRAINTS.md` is auto-loaded into every run
 - **Skills shop** — 672 pre-built skills for Hermes, one-click install
 - **Telegram control** — manage tasks from your phone, get results on the go
 - **Auto-setup** — first launch downloads Node.js and Python, configures agents, creates a knowledge base
+
+> **The model is commodity, the harness is the moat.** The value isn't the model (everyone has the same one), it's the harness around it. AURA gives you a moat layer over your BYO models. **AURA Pro** adds smart model routing, the full set of 6 patterns and a Self-Improving Loop — see [docs/HARNESS.ru.md](docs/HARNESS.ru.md).
 
 ### Quick start
 
