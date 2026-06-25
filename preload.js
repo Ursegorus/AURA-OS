@@ -21,6 +21,24 @@ contextBridge.exposeInMainWorld('aura', {
     cancel: (id) => ipcRenderer.invoke('task:cancel', id),
     list: () => ipcRenderer.invoke('task:list')
   },
+  harness: {
+    plan: (input) => ipcRenderer.invoke('harness:plan', input),
+    start: (input, opts) => ipcRenderer.invoke('harness:start', { input, opts })
+  },
+  loop: {
+    start: (input, opts) => ipcRenderer.invoke('loop:start', { input, opts }),
+    stop: (id) => ipcRenderer.invoke('loop:stop', id),
+    confirm: (id, go) => ipcRenderer.invoke('loop:confirm', { id, go }),
+    estimate: (input, opts) => ipcRenderer.invoke('loop:estimate', { input, opts })
+  },
+  constraints: {
+    list: () => ipcRenderer.invoke('constraints:list'),
+    add: (rule) => ipcRenderer.invoke('constraints:add', rule),
+    open: () => ipcRenderer.invoke('constraints:open')
+  },
+  pro: {
+    status: () => ipcRenderer.invoke('pro:status')
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch) => ipcRenderer.invoke('settings:set', patch),

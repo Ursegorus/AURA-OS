@@ -13,10 +13,26 @@
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { HarnessEngine, LoopRunner } = require('./harness');
 
 let seq = 0;
 const nextId = (p) => p + '-' + (++seq) + '-' + Date.now().toString(36);
 const IS_WIN = process.platform === 'win32';
+
+// ---------- Pro extension point (open-core) ----------
+// AURA Pro (приватный пакет aura-pro) подключается опционально.
+// Без него ядро работает в полном объёме (graceful degradation).
+let _proCache;
+function loadPro() {
+  if (_proCache !== undefined) return _proCache;
+  try {
+    _proCache = require('aura-pro');
+    if (_proCache && typeof _proCache.activate === 'function') _proCache.activate();
+  } catch (_) {
+    _proCache = null;
+  }
+  return _proCache;
+}
 
 // ============================================================
 //  КЛАССИЧЕСКИЙ ОРКЕСТРАТОР (legacy, когда Hermes не установлен)
@@ -201,9 +217,20 @@ class LegacyOrchestrator {
           .filter(Boolean)
           .map(d => `Результат шага «${d.title}» (${d.agentName}):\n${(d.output || '').slice(-3000)}`)
           .join('\n\n');
-        const prompt = depContext ? depContext + '\n\n---\n\n' + st.prompt : st.prompt;
+        let prompt = depContext ? depContext + '\n\n---\n\n' + st.prompt : st.prompt;
+        // CONSTRAINTS.md — автозагрузка правил в начало промпта
+        try { const c = this.memory.loadConstraints && this.memory.loadConstraints(); if (c) prompt = c + '\n\n---\n\n' + prompt; } catch (_) {}
+        // Smart Model Routing (Pro): выбрать модель по сложности подзадачи
+        const pro = loadPro();
+        if (pro && typeof pro.routeModel === 'function') {
+          try {
+            const agentDef = this.agents.getAgent(st.agent);
+            const patched = pro.patchAgentDef ? pro.patchAgentDef({ ...agentDef }) : agentDef;
+            st.model = pro.routeModel(patched, st.complexity) || st.model;
+          } catch (_) {}
+        }
         const p = this.agents.run(st.agent, prompt, {
-          cwd, runId: task.id + ':' + st.id,
+          cwd, runId: task.id + ':' + st.id, model: st.model,
           onData: t => this.emit({ type: 'log', taskId: task.id, agent: st.agent, subtask: st.id, text: t })
         }).then(res => {
           st.output = res.output;
@@ -766,7 +793,30 @@ class Orchestrator {
     this._hermes = new HermesEngine(agents, memory, store, emit);
     this._opencode = new OpenCodeEngine(agents, memory, store, emit);
     this._claude = new ClaudeCodeEngine(agents, memory, store, emit);
+    // Harness-движки работают поверх любого выбранного движка агентов
+    this._harness = new HarnessEngine({ agents, memory, store, emit, getPro: loadPro });
+    this._loops = new LoopRunner({ agents, memory, store, emit, getPro: loadPro });
   }
+
+  // ---------- Pro status ----------
+  proStatus() {
+    const pro = loadPro();
+    if (!pro) return { installed: false, features: [] };
+    let features = [];
+    try { features = (typeof pro.capabilities === 'function' ? pro.capabilities() : pro.features) || []; } catch (_) {}
+    return { installed: true, version: pro.version || '?', features };
+  }
+
+  // ---------- Dynamic Harness ----------
+  planHarness(input) { return this._harness.plan(input); }
+  startHarness(input, opts) { return this._harness.start(input, opts); }
+
+  // ---------- Ralph Loop ----------
+  startLoop(input, opts) { return this._loops.start(input, opts); }
+  stopLoop(id) { return this._loops.stop(id); }
+  confirmLoop(id, go) { return this._loops.confirm(id, go); }
+  estimateLoopCost(input, opts) { return this._loops.estimateCost(input, opts); }
+  listLoops() { return this._loops.listLoops(); }
 
   _engine() {
     const mode = this.store.get('orchestratorMode', 'auto');
@@ -810,8 +860,21 @@ class Orchestrator {
   }
 
   startTask(input) { return this._engine().startTask(input); }
-  cancelTask(id) { return this._engine().cancelTask(id); }
-  listTasks() { return this._engine().listTasks(); }
+  cancelTask(id) {
+    // маршрутизируем отмену к нужному владельцу
+    if (this._loops.loops.has(id)) return this._loops.stop(id);
+    if (this._harness.tasks.has(id)) return this._harness.cancel(id);
+    return this._engine().cancelTask(id);
+  }
+  listTasks() {
+    // объединяем обычные задачи + harness + loop, сортируем по времени старта
+    const all = [
+      ...this._engine().listTasks(),
+      ...this._harness.listTasks(),
+      ...this._loops.listLoops()
+    ];
+    return all.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  }
   settings() { return this._engine().settings(); }
   workspaceDir() { return this._engine().workspaceDir(); }
 }

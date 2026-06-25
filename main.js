@@ -344,6 +344,28 @@ ipcMain.handle('task:start', (_e, input) => orchestrator.startTask(input));
 ipcMain.handle('task:cancel', (_e, id) => orchestrator.cancelTask(id));
 ipcMain.handle('task:list', () => orchestrator.listTasks());
 
+// ---------- Dynamic Harness ----------
+ipcMain.handle('harness:plan', (_e, input) => orchestrator.planHarness(input));
+ipcMain.handle('harness:start', (_e, { input, opts }) => orchestrator.startHarness(input, opts || {}));
+
+// ---------- Ralph Loop ----------
+ipcMain.handle('loop:start', (_e, { input, opts }) => orchestrator.startLoop(input, opts || {}));
+ipcMain.handle('loop:stop', (_e, id) => orchestrator.stopLoop(id));
+ipcMain.handle('loop:confirm', (_e, { id, go }) => orchestrator.confirmLoop(id, go));
+ipcMain.handle('loop:estimate', (_e, { input, opts }) => orchestrator.estimateLoopCost(input, opts || {}));
+
+// ---------- CONSTRAINTS.md (Self-Improving Loop) ----------
+ipcMain.handle('constraints:list', () => memory.listConstraints());
+ipcMain.handle('constraints:add', (_e, rule) => memory.appendConstraint(rule, 'manual'));
+ipcMain.handle('constraints:open', () => {
+  const p = memory.constraintsPath();
+  if (!fs.existsSync(p)) memory.appendConstraint('пример правила — удалите его', 'init');
+  shell.openPath(p);
+});
+
+// ---------- Pro status ----------
+ipcMain.handle('pro:status', () => orchestrator.proStatus());
+
 ipcMain.handle('settings:get', () => ({
   version: require('./package.json').version,
   vaultPath: store.get('vaultPath', ''),

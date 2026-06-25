@@ -421,3 +421,58 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 
 /* utility */
 .hidden { display: none !important; }
+
+/* ===================== HARNESS VIEW ===================== */
+.pro-badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.pro-badge.on { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #fff; }
+.pro-badge.off { background: var(--card2); color: var(--muted); border: 1px solid var(--border); }
+.harness-tabs { display: flex; gap: 6px; margin: 14px 0; flex-wrap: wrap; }
+.harness-tab {
+  background: var(--card); border: 1px solid var(--border); color: var(--muted);
+  padding: 7px 14px; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+.harness-tab:hover { color: var(--text); }
+.harness-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.harness-panel { display: none; }
+.harness-panel.active { display: block; }
+.harness-plan-box { margin-top: 14px; }
+.harness-plan-box:empty { display: none; }
+.harness-plan-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.plan-row { font-size: 15px; margin-bottom: 6px; }
+.plan-reason { color: var(--text); margin: 6px 0; }
+.plan-meta { color: var(--muted); font-size: 12px; }
+.pattern-chip {
+  display: inline-block; background: var(--card2); border: 1px solid var(--border);
+  color: var(--accent); border-radius: 8px; padding: 1px 8px; font-size: 12px; margin-right: 6px;
+}
+.pro-tag, .template-mode {
+  display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #fff;
+}
+.loop-config { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 14px 0; }
+.loop-config .col { display: flex; flex-direction: column; gap: 4px; }
+.loop-config label { font-size: 12px; color: var(--muted); }
+.loop-config input, .loop-config select {
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 7px 10px; font-size: 13px;
+}
+.loop-actions { display: flex; align-items: center; gap: 12px; }
+.loop-cost-note { color: var(--warn); font-size: 13px; }
+.templates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 14px; }
+.template-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+}
+.template-icon { font-size: 26px; }
+.template-title { font-weight: 700; font-size: 15px; }
+.template-card .btn { margin-top: auto; }
+.constraints-add { display: flex; gap: 8px; margin: 12px 0; }
+.constraints-add input { flex: 1; background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 12px; }
+.constraints-list { display: flex; flex-direction: column; gap: 6px; }
+.constraint-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.pro-status-box { margin-top: 14px; }
+.pro-head { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+.pro-head.on { color: var(--ok); }
+.pro-head.off { color: var(--muted); }
+.pro-feature { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+.pro-status-box code { display: inline-block; margin-top: 10px; background: var(--bg2); padding: 8px 12px; border-radius: 8px; color: var(--accent); font-size: 12px; }

@@ -46,6 +46,19 @@ $$('.nav-btn').forEach(btn => btn.addEventListener('click', () => {
   if (btn.dataset.view === 'memory') loadMemory();
   if (btn.dataset.view === 'agents') loadAgents();
   if (btn.dataset.view === 'hermes') loadHermesPanel();
+  if (btn.dataset.view === 'harness') loadHarness();
+}));
+
+/* ---------- Harness sub-tabs ---------- */
+$$('.harness-tab').forEach(tab => tab.addEventListener('click', () => {
+  $$('.harness-tab').forEach(t => t.classList.remove('active'));
+  $$('.harness-panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  const panel = document.getElementById('harness-' + tab.dataset.harnessTab);
+  if (panel) panel.classList.add('active');
+  if (tab.dataset.harnessTab === 'templates') renderTemplates();
+  if (tab.dataset.harnessTab === 'constraints') loadConstraints();
+  if (tab.dataset.harnessTab === 'pro') loadProStatus();
 }));
 
 /* ---------- Hermes tabs ---------- */
@@ -83,10 +96,11 @@ function renderTasks() {
       </div>`).join('');
     const log = state.logs[task.id] || '';
     const active = task.status === 'running' || task.status === 'planning';
+    const patternChip = task.pattern ? `<span class="pattern-chip">⟳ ${esc(task.pattern)}${task.iteration ? ' · ' + task.iteration + (task.maxIterations ? '/' + task.maxIterations : '') : ''}${typeof task.spentUsd === 'number' && task.spentUsd > 0 ? ' · $' + task.spentUsd.toFixed(3) : ''}</span>` : '';
     return `
     <div class="task-card" data-task="${task.id}">
       <div class="task-head">
-        <div class="task-title">${esc(task.input.slice(0, 120))}</div>
+        <div class="task-title">${patternChip}${esc(task.input.slice(0, 120))}</div>
         <span class="pill ${stClass}">${esc(t('status_' + task.status.replace(/-/g, '_')))}</span>
       </div>
       ${subtasks ? `<div class="subtask-flow">${subtasks}</div>` : ''}
@@ -96,6 +110,7 @@ function renderTasks() {
       </details>
       ${task.summary ? `<div class="task-summary"><b>${esc(t('summary'))}:</b>\n${esc(task.summary)}</div>` : ''}
       <div class="task-actions">
+        ${task.awaiting ? `<button class="btn primary" data-confirm-go="${task.id}">▶ ${esc(t('run'))}</button>` : ''}
         ${active ? `<button class="btn danger" data-cancel="${task.id}">${esc(t('cancel'))}</button>` : ''}
         <button class="btn ghost" data-open-ws="1">${esc(t('open_workspace'))}</button>
       </div>
@@ -103,6 +118,7 @@ function renderTasks() {
   }).join('');
 
   $$('[data-cancel]').forEach(b => b.addEventListener('click', () => window.aura.task.cancel(b.dataset.cancel)));
+  $$('[data-confirm-go]').forEach(b => b.addEventListener('click', () => window.aura.loop.confirm(b.dataset.confirmGo, true)));
   $$('[data-open-ws]').forEach(b => b.addEventListener('click', () => {
     const ws = state.settings.workspace || '';
     if (ws) window.aura.openPath(ws);
@@ -605,6 +621,144 @@ $('#btn-shop-refresh').addEventListener('click', () => {
 $('#shop-source').addEventListener('change', () => {
   loadShopResults($('#shop-source').value);
 });
+
+/* ---------- Harness view ---------- */
+const PRODUCTION_TEMPLATES = [
+  { key: 'audit', mode: 'harness', icon: '🛡', titleRu: 'Security-аудит', titleEn: 'Security audit', textRu: 'Проведи security-аудит проекта в рабочей папке: найди XSS, SQL-инъекции, утечки секретов, обход авторизации. Для каждой находки — файл, строка, серьёзность и как починить. Не выдумывай уязвимостей.', textEn: 'Run a security audit of the project: find XSS, SQL injection, secret leaks, auth bypass. For each: file, line, severity, fix. Do not invent issues.' },
+  { key: 'tests', mode: 'loop', icon: '✅', titleRu: 'Зелёные тесты', titleEn: 'Green tests', textRu: 'Добейся, чтобы все тесты в проекте проходили. Найди упавшие, почини, перезапусти — до зелёного.', textEn: 'Make all tests pass. Find failures, fix, re-run until green.', bp: 'npm test' },
+  { key: 'deps', mode: 'harness', icon: '📦', titleRu: 'Аудит зависимостей', titleEn: 'Dependency audit', textRu: 'Проверь все зависимости проекта: устаревшие, уязвимые (CVE), неиспользуемые. Для каждой — рекомендация.', textEn: 'Audit all dependencies: outdated, vulnerable (CVE), unused. Recommendation for each.' },
+  { key: 'name', mode: 'harness', icon: '🏆', titleRu: 'Нейминг (турнир)', titleEn: 'Naming (tournament)', textRu: 'Придумай имя для нового продукта. Сгенерируй кандидатов разными подходами, отфильтруй по критериям, проведи турнир и выбери 3 лучших с обоснованием.', textEn: 'Pick a product name. Generate candidates via different approaches, filter, run a tournament, pick top 3 with rationale.' },
+  { key: 'review', mode: 'harness', icon: '⚖', titleRu: 'Состязательное ревью', titleEn: 'Adversarial review', textRu: 'Проверь код в рабочей папке состязательно: один агент защищает, другой ищет дыры. Выдай список реальных проблем и исправь их.', textEn: 'Adversarially review the code: one defends, one attacks. List real issues and fix them.' },
+  { key: 'migrate', mode: 'loop', icon: '🔁', titleRu: 'Миграция до зелёного', titleEn: 'Migration until green', textRu: 'Мигрируй проект на новую версию фреймворка, файл за файлом, прогоняя сборку после каждого шага — до зелёного.', textEn: 'Migrate the project to the new framework version, file by file, building after each step until green.', bp: 'npm run build' }
+];
+
+let _proStatusCache = null;
+
+async function loadHarness() {
+  // Pro-бейдж в шапке
+  const pro = _proStatusCache || (_proStatusCache = await window.aura.pro.status());
+  const badge = $('#pro-badge');
+  if (badge) {
+    badge.className = 'pro-badge ' + (pro.installed && pro.features.length ? 'on' : 'off');
+    badge.textContent = (pro.installed && pro.features.length) ? '★ Pro' : 'Free';
+  }
+  applyI18n();
+}
+
+/* dynamic harness */
+$('#btn-harness-plan').addEventListener('click', async () => {
+  const input = $('#harness-input').value.trim();
+  if (!input) return;
+  const plan = await window.aura.harness.plan(input);
+  const box = $('#harness-plan-box');
+  const proTag = plan.proAdvanced ? '<span class="pro-tag">Pro</span>' : '';
+  box.innerHTML = `
+    <div class="plan-row"><b>${esc(t('harness_tab_dynamic'))}:</b> <span class="pattern-chip">⟳ ${esc(plan.pattern)}</span> ${proTag}</div>
+    <div class="plan-reason">${esc(plan.reason)}</div>
+    <div class="plan-meta">complexity: ${esc(plan.complexity)} · паттернов доступно: ${plan.availablePatterns.length}${plan.proInstalled ? '' : ' · <i>Pro даёт 6 паттернов</i>'}</div>`;
+});
+
+$('#btn-harness-run').addEventListener('click', async () => {
+  const input = $('#harness-input').value.trim();
+  if (!input) return;
+  $('#harness-input').value = '';
+  await window.aura.harness.start(input);
+  gotoDashboard();
+});
+
+/* ralph loop */
+$('#btn-loop-estimate').addEventListener('click', async () => {
+  const input = $('#loop-input').value.trim() || 'задача';
+  const opts = { maxIterations: parseInt($('#loop-iter').value, 10) || 10 };
+  const est = await window.aura.loop.estimate(input, opts);
+  $('#loop-cost-note').textContent = `≈ $${est.usd} / ${est.iterations} итер.${est.pro ? ' (' + (est.model || '') + ')' : ' · ' + (est.note || '')}`;
+});
+
+$('#btn-loop-run').addEventListener('click', async () => {
+  const input = $('#loop-input').value.trim();
+  if (!input) return;
+  const opts = {
+    maxIterations: parseInt($('#loop-iter').value, 10) || 10,
+    backpressureCmd: $('#loop-bp').value.trim(),
+    autonomy: $('#loop-autonomy').value,
+    costCapUsd: parseFloat($('#loop-cap').value) || 0
+  };
+  $('#loop-input').value = '';
+  await window.aura.loop.start(input, opts);
+  gotoDashboard();
+});
+
+function gotoDashboard() {
+  $$('.nav-btn').forEach(b => b.classList.remove('active'));
+  $$('.view').forEach(v => v.classList.remove('active'));
+  document.querySelector('.nav-btn[data-view="dashboard"]').classList.add('active');
+  $('#view-dashboard').classList.add('active');
+}
+
+/* templates */
+function renderTemplates() {
+  const grid = $('#templates-grid');
+  grid.innerHTML = PRODUCTION_TEMPLATES.map(tpl => `
+    <div class="template-card" data-tpl="${tpl.key}">
+      <div class="template-icon">${tpl.icon}</div>
+      <div class="template-title">${esc(LANG === 'en' ? tpl.titleEn : tpl.titleRu)}</div>
+      <div class="template-mode">${tpl.mode === 'loop' ? 'Ralph Loop' : 'Auto-harness'}</div>
+      <button class="btn primary template-use" data-tpl="${tpl.key}">${esc(t('harness_run'))}</button>
+    </div>`).join('');
+  $$('.template-use').forEach(b => b.addEventListener('click', () => {
+    const tpl = PRODUCTION_TEMPLATES.find(x => x.key === b.dataset.tpl);
+    const text = LANG === 'en' ? tpl.textEn : tpl.textRu;
+    if (tpl.mode === 'loop') {
+      $('#loop-input').value = text;
+      if (tpl.bp) $('#loop-bp').value = tpl.bp;
+      switchHarnessTab('loop');
+    } else {
+      $('#harness-input').value = text;
+      switchHarnessTab('dynamic');
+    }
+  }));
+}
+
+function switchHarnessTab(name) {
+  $$('.harness-tab').forEach(t => t.classList.remove('active'));
+  $$('.harness-panel').forEach(p => p.classList.remove('active'));
+  const tabBtn = document.querySelector(`.harness-tab[data-harness-tab="${name}"]`);
+  if (tabBtn) tabBtn.classList.add('active');
+  const panel = document.getElementById('harness-' + name);
+  if (panel) panel.classList.add('active');
+}
+
+/* constraints */
+async function loadConstraints() {
+  const rules = await window.aura.constraints.list();
+  const box = $('#constraints-list');
+  if (!rules || rules.length === 0) {
+    box.innerHTML = `<div class="empty">${esc(t('memory_empty'))}</div>`;
+    return;
+  }
+  box.innerHTML = rules.map(r => `<div class="constraint-item">— ${esc(r)}</div>`).join('');
+}
+$('#btn-constraint-add').addEventListener('click', async () => {
+  const v = $('#constraint-input').value.trim();
+  if (!v) return;
+  await window.aura.constraints.add(v);
+  $('#constraint-input').value = '';
+  loadConstraints();
+});
+$('#btn-constraint-open').addEventListener('click', () => window.aura.constraints.open());
+
+/* pro status */
+async function loadProStatus() {
+  const pro = _proStatusCache = await window.aura.pro.status();
+  const box = $('#pro-status-box');
+  if (pro.installed && pro.features.length) {
+    box.innerHTML = `<div class="pro-head on">★ ${esc(t('pro_installed'))} · v${esc(pro.version)}</div>` +
+      pro.features.map(f => `<div class="pro-feature"><b>${esc(f.name)}</b><div class="hint">${esc(f.desc)}</div></div>`).join('');
+  } else {
+    box.innerHTML = `<div class="pro-head off">${esc(t('pro_absent'))}</div><p class="hint">${esc(t('pro_unlock'))}</p>` +
+      `<code>npm install git+https://github.com/Ursegorus/aura-pro.git</code>`;
+  }
+}
 
 /* ---------- init ---------- */
 (async function init() {

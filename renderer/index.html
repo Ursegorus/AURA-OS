@@ -34,6 +34,7 @@
       </div>
       <nav>
         <button class="nav-btn active" data-view="dashboard"><span class="ico">◈</span><span data-i18n="nav_dashboard"></span></button>
+        <button class="nav-btn" data-view="harness"><span class="ico">⟳</span><span data-i18n="nav_harness"></span></button>
         <button class="nav-btn" data-view="agents"><span class="ico">⬡</span><span data-i18n="nav_agents"></span><span id="agent-count" class="badge"></span></button>
         <button class="nav-btn" data-view="memory"><span class="ico">◎</span><span data-i18n="nav_memory"></span></button>
         <button class="nav-btn" data-view="hermes"><span class="ico">H</span><span data-i18n="nav_hermes"></span></button>
@@ -54,6 +55,90 @@
           </div>
         </div>
         <div id="task-list" class="task-list"></div>
+      </section>
+
+      <!-- HARNESS -->
+      <section id="view-harness" class="view">
+        <div class="view-head">
+          <h2 data-i18n="harness_title"></h2>
+          <div id="pro-badge" class="pro-badge"></div>
+        </div>
+        <p class="hint" data-i18n="harness_intro"></p>
+
+        <div class="harness-tabs">
+          <button class="harness-tab active" data-harness-tab="dynamic" data-i18n="harness_tab_dynamic"></button>
+          <button class="harness-tab" data-harness-tab="loop" data-i18n="harness_tab_loop"></button>
+          <button class="harness-tab" data-harness-tab="templates" data-i18n="harness_tab_templates"></button>
+          <button class="harness-tab" data-harness-tab="constraints" data-i18n="harness_tab_constraints"></button>
+          <button class="harness-tab" data-harness-tab="pro" data-i18n="harness_tab_pro"></button>
+        </div>
+
+        <!-- Dynamic Harness -->
+        <div id="harness-dynamic" class="harness-panel active">
+          <div class="composer">
+            <textarea id="harness-input" rows="3" data-i18n-ph="harness_input_ph"></textarea>
+            <div class="composer-actions">
+              <button id="btn-harness-plan" class="btn ghost" data-i18n="harness_plan"></button>
+              <button id="btn-harness-run" class="btn primary" data-i18n="harness_run"></button>
+            </div>
+          </div>
+          <div id="harness-plan-box" class="harness-plan-box"></div>
+        </div>
+
+        <!-- Ralph Loop -->
+        <div id="harness-loop" class="harness-panel">
+          <div class="composer">
+            <textarea id="loop-input" rows="3" data-i18n-ph="loop_input_ph"></textarea>
+          </div>
+          <div class="loop-config">
+            <div class="col">
+              <label data-i18n="loop_max_iter"></label>
+              <input id="loop-iter" type="number" min="1" max="50" value="10" />
+            </div>
+            <div class="col">
+              <label data-i18n="loop_backpressure"></label>
+              <input id="loop-bp" type="text" placeholder="npm test" />
+            </div>
+            <div class="col">
+              <label data-i18n="loop_autonomy"></label>
+              <select id="loop-autonomy">
+                <option value="L3" data-i18n="loop_l3"></option>
+                <option value="L2" data-i18n="loop_l2"></option>
+                <option value="L1" data-i18n="loop_l1"></option>
+              </select>
+            </div>
+            <div class="col">
+              <label data-i18n="loop_cost_cap"></label>
+              <input id="loop-cap" type="number" min="0" step="0.5" placeholder="0" />
+            </div>
+          </div>
+          <div class="loop-actions">
+            <button id="btn-loop-estimate" class="btn ghost" data-i18n="loop_estimate"></button>
+            <button id="btn-loop-run" class="btn primary" data-i18n="loop_run"></button>
+            <span id="loop-cost-note" class="loop-cost-note"></span>
+          </div>
+        </div>
+
+        <!-- Templates -->
+        <div id="harness-templates" class="harness-panel">
+          <div id="templates-grid" class="templates-grid"></div>
+        </div>
+
+        <!-- Constraints -->
+        <div id="harness-constraints" class="harness-panel">
+          <p class="hint" data-i18n="constraints_intro"></p>
+          <div class="constraints-add">
+            <input id="constraint-input" type="text" data-i18n-ph="constraint_ph" />
+            <button id="btn-constraint-add" class="btn primary" data-i18n="constraint_add"></button>
+            <button id="btn-constraint-open" class="btn ghost" data-i18n="constraint_open"></button>
+          </div>
+          <div id="constraints-list" class="constraints-list"></div>
+        </div>
+
+        <!-- Pro status -->
+        <div id="harness-pro" class="harness-panel">
+          <div id="pro-status-box" class="pro-status-box"></div>
+        </div>
       </section>
 
       <!-- AGENTS -->

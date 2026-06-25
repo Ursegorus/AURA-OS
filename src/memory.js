@@ -206,6 +206,55 @@ class Memory {
 
     return { updated: added.length > 0, files_added: added, files_existing: existing };
   }
+  // ====================== CONSTRAINTS.md (Self-Improving Loop) ======================
+
+  /** Путь к файлу правил, который автозагружается в начало каждого прогона. */
+  constraintsPath() {
+    return path.join(this.auraDir(), 'CONSTRAINTS.md');
+  }
+
+  /** Убрать маркер списка и HTML-комментарий-метку из строки правила. */
+  _cleanRule(line) {
+    return String(line || '').replace(/^\s*[-*]\s+/, '').replace(/<!--[\s\S]*?-->/g, '').trim();
+  }
+
+  /** Содержимое правил для инъекции в промпт агента. Пусто, если файла нет. */
+  loadConstraints(maxChars = 4000) {
+    const rules = this.listConstraints();
+    if (rules.length === 0) return '';
+    return ['Действующие правила проекта (CONSTRAINTS.md) — соблюдай их строго:', ...rules.map(r => '- ' + r)].join('\n').slice(0, maxChars);
+  }
+
+  /** Список правил как массив строк (для UI). Только строки-правила, без меток. */
+  listConstraints() {
+    const file = this.constraintsPath();
+    if (!fs.existsSync(file)) return [];
+    try {
+      return fs.readFileSync(file, 'utf8').split('\n')
+        .filter(l => /^\s*[-*]\s+/.test(l))           // только пункты списка
+        .map(l => this._cleanRule(l))
+        .filter(Boolean);
+    } catch (_) { return []; }
+  }
+
+  /** Добавить правило (с дедупликацией). Возвращает true, если правило новое. */
+  appendConstraint(rule, source = '') {
+    rule = this._cleanRule(rule);
+    if (!rule) return false;
+    const file = this.constraintsPath();
+    let content = '';
+    if (fs.existsSync(file)) content = fs.readFileSync(file, 'utf8');
+    else content = '# CONSTRAINTS — правила проекта (Self-Improving Loop)\n\n<!-- Правила копятся из вердиктов верификатора и автозагружаются в каждый прогон. -->\n';
+    // дедуп по нормализованному тексту (без меток-комментариев)
+    const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const existing = this.listConstraints().map(norm);
+    if (existing.includes(norm(rule))) return false;
+    const tag = source ? `  <!-- ${source} ${new Date().toISOString().slice(0, 10)} -->` : '';
+    content = content.replace(/\s*$/, '') + `\n- ${rule}${tag}\n`;
+    fs.writeFileSync(file, content, 'utf8');
+    return true;
+  }
+
   /** Записать/создать .md в vault. */
   writeNote(relativePath, content) {
     const full = path.resolve(path.join(this.basePath(), relativePath));
