@@ -69,7 +69,8 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AURA OS"
+      "shortcutName": "AURA OS",
+      "artifactName": "AURA-OS-Setup-${version}.${ext}"
     },
     "portable": {
       "artifactName": "AURA-OS-${version}-portable.${ext}"
