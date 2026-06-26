@@ -50,7 +50,7 @@
         <button class="nav-btn" data-view="hermes"><span class="ico">H</span><span data-i18n="nav_hermes"></span></button>
         <button class="nav-btn" data-view="settings"><span class="ico">⚙</span><span data-i18n="nav_settings"></span></button>
       </nav>
-      <div class="sidebar-footer" id="sidebar-version">v1.1.1</div>
+      <div class="sidebar-footer" id="sidebar-version">v1.2.1</div>
     </aside>
 
     <!-- Main -->
@@ -222,6 +222,16 @@
       <section id="view-settings" class="view">
         <div class="view-head"><h2 data-i18n="settings_title"></h2></div>
         <div class="settings-card">
+          <div class="hermes-section">
+            <h3 data-i18n="update_title"></h3>
+            <p class="hint"><span data-i18n="update_current"></span> <b id="update-version"></b></p>
+            <div id="update-status" class="update-status"></div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn ghost" id="btn-update-check" data-i18n="update_check"></button>
+              <button class="btn primary" id="btn-update-install" style="display:none" data-i18n="update_install"></button>
+            </div>
+          </div>
+
           <label data-i18n="set_vault"></label>
           <div class="row"><input id="set-vault" type="text" readonly /><button class="btn ghost" id="pick-vault" data-i18n="set_pick"></button></div>
 
@@ -260,6 +270,16 @@
                         </select>
             <div id="hermes-status" class="hermes-engine-status"></div>
             <div id="opencode-status" class="hermes-engine-status" style="margin-top:4px"></div>
+          </div>
+
+          <div class="hermes-section">
+            <h3 data-i18n="model_cap_title"></h3>
+            <p class="hint" data-i18n="model_cap_hint"></p>
+            <select id="set-model-cap">
+              <option value="haiku" data-i18n="model_cap_haiku"></option>
+              <option value="sonnet" data-i18n="model_cap_sonnet"></option>
+              <option value="opus" data-i18n="model_cap_opus"></option>
+            </select>
           </div>
 
           <div class="hermes-section">

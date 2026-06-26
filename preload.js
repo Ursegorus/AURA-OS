@@ -61,6 +61,12 @@ contextBridge.exposeInMainWorld('aura', {
     restart: () => ipcRenderer.invoke('telegram:restart'),
     onStatus: (cb) => ipcRenderer.on('telegram-status', (_e, data) => cb(data))
   },
+  update: {
+    get: () => ipcRenderer.invoke('update:get'),
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onStatus: (cb) => ipcRenderer.on('update:status', (_e, data) => cb(data))
+  },
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
   setup: {
     status: () => ipcRenderer.invoke('setup:status'),

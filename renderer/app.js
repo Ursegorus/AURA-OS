@@ -133,10 +133,26 @@ function upsertTask(task) {
   renderTasks();
 }
 
+// Поле ввода растёт под объём текста, но не выше окна (max-height в CSS = 60vh).
+function autoGrow(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  const max = Math.max(120, Math.floor(window.innerHeight * 0.6));
+  const h = Math.min(el.scrollHeight, max);
+  el.style.height = h + 'px';
+  el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden';
+}
+// Подключаем авто-рост ко всем композер-полям + сброс высоты при очистке.
+['#task-input', '#harness-input', '#loop-input'].forEach(sel => {
+  const el = $(sel);
+  if (el) { el.addEventListener('input', () => autoGrow(el)); autoGrow(el); }
+});
+
 async function startTask() {
   const input = $('#task-input').value.trim();
   if (!input) return;
   $('#task-input').value = '';
+  autoGrow($('#task-input'));
   await window.aura.task.start(input);
 }
 
@@ -184,49 +200,106 @@ window.aura.onEvent((ev) => {
   }
 });
 
-/* ---------- Уточняющие вопросы (прямой вопрос с вариантами + рекомендация) ---------- */
+/* ---------- Уточняющие вопросы — пошаговая панель как в Claude (AskUserQuestion) ---------- */
 function showClarify(taskId, questions) {
   if (!questions.length) { window.aura.task.clarifyAnswer(taskId, []); return; }
   const old = document.getElementById('clarify-overlay');
   if (old) old.remove();
   const ov = document.createElement('div');
   ov.id = 'clarify-overlay';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  ov.className = 'clarify-overlay';
   const box = document.createElement('div');
-  box.style.cssText = 'background:var(--bg-card,#23232a);color:var(--text,#e8e8ec);border:1px solid var(--border,#333);border-radius:12px;max-width:560px;width:92%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 8px 40px rgba(0,0,0,.5);';
-  let html = `<h3 style="margin:0 0 4px">${esc(t('clarify_title'))}</h3>
-    <p class="hint" style="margin:0 0 16px">${esc(t('clarify_hint'))}</p>`;
-  questions.forEach((q, i) => {
-    html += `<div style="margin-bottom:16px"><div style="font-weight:600;margin-bottom:8px">${esc(q.question)}</div>`;
-    (q.options || []).forEach((opt, j) => {
-      const rec = opt === q.recommended;
-      html += `<label style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer">
-        <input type="radio" name="cq${i}" value="${esc(opt)}" ${rec || j === 0 ? 'checked' : ''}/>
-        <span>${esc(opt)}${rec ? ' <span style="color:var(--accent-gold,#d4a843)">★ ' + esc(t('clarify_recommended')) + '</span>' : ''}</span></label>`;
-    });
-    html += `<label style="display:flex;gap:8px;align-items:center;padding:6px 8px">
-      <input type="radio" name="cq${i}" value="__other__"/>
-      <input type="text" id="cqo${i}" placeholder="${esc(t('clarify_other'))}" style="flex:1;background:var(--bg,#1a1a1e);border:1px solid var(--border,#333);border-radius:6px;color:inherit;padding:4px 8px"/></label>`;
-    html += `</div>`;
-  });
-  html += `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-    <button class="btn" id="clarify-submit">${esc(t('clarify_submit'))}</button></div>`;
-  box.innerHTML = html;
+  box.className = 'clarify-box';
   ov.appendChild(box);
   document.body.appendChild(ov);
-  box.querySelectorAll('#cqo0,[id^="cqo"]').forEach((inp, i) => {
-    inp.addEventListener('focus', () => { const r = box.querySelector(`input[name="cq${i}"][value="__other__"]`); if (r) r.checked = true; });
-  });
-  $('#clarify-submit').addEventListener('click', () => {
+
+  // Дефолт выбора каждого вопроса = рекомендация (иначе первый вариант).
+  const defLabel = (q) => q.recommended || (q.options[0] && q.options[0].label) || '';
+  const picks = questions.map(q => ({ value: defLabel(q), text: '' }));
+  let idx = 0;
+
+  const finalize = () => {
     const answers = questions.map((q, i) => {
-      const sel = box.querySelector(`input[name="cq${i}"]:checked`);
-      let val = sel ? sel.value : (q.recommended || q.options[0]);
-      if (val === '__other__') { const o = box.querySelector('#cqo' + i); val = (o && o.value.trim()) || q.recommended || q.options[0]; }
+      const p = picks[i];
+      let val = p.value === '__other__' ? (p.text.trim() || defLabel(q)) : p.value;
       return { question: q.question, answer: val };
     });
     window.aura.task.clarifyAnswer(taskId, answers);
     ov.remove();
+  };
+  const close = () => { window.aura.task.clarifyAnswer(taskId, []); ov.remove(); };
+
+  function render() {
+    const q = questions[idx];
+    const last = idx === questions.length - 1;
+    const multi = questions.length > 1;
+    const opts = (q.options || []).map((opt, j) => {
+      const rec = opt.label === q.recommended;
+      const sel = picks[idx].value === opt.label;
+      return `<div class="clarify-opt${sel ? ' selected' : ''}" data-val="${esc(opt.label)}">
+        <div class="clarify-opt-main">
+          <div class="clarify-opt-label">${esc(opt.label)}${rec ? '<span class="clarify-rec">★ ' + esc(t('clarify_recommended')) + '</span>' : ''}</div>
+          ${opt.description ? `<div class="clarify-opt-desc">${esc(opt.description)}</div>` : ''}
+        </div>
+        <span class="clarify-check" aria-hidden="true"></span>
+      </div>`;
+    }).join('');
+    const otherSel = picks[idx].value === '__other__';
+    const otherCard = `<div class="clarify-opt clarify-other${otherSel ? ' selected' : ''}" data-val="__other__">
+      <div class="clarify-opt-main">
+        <div class="clarify-opt-label">${esc(t('clarify_other'))}</div>
+        <input type="text" id="clarify-other-input" class="clarify-other-input" placeholder="${esc(t('clarify_other_ph'))}" value="${esc(picks[idx].text)}" style="${otherSel ? '' : 'display:none'}"/>
+      </div>
+      <span class="clarify-check" aria-hidden="true"></span>
+    </div>`;
+
+    box.innerHTML = `
+      <div class="clarify-head">
+        ${multi ? `<span class="clarify-progress">${idx + 1}/${questions.length}</span>` : ''}
+        <div class="clarify-q-title">${esc(q.question)}</div>
+        <button class="clarify-x" id="clarify-close" title="${esc(t('clarify_skip'))}">✕</button>
+      </div>
+      <div class="clarify-opts">${opts}${otherCard}</div>
+      <div class="clarify-actions">
+        <button class="btn ghost" id="clarify-back"${idx === 0 ? ' disabled' : ''}>${esc(t('clarify_back'))}</button>
+        <div class="clarify-actions-right">
+          <button class="btn ghost" id="clarify-skip">${esc(t('clarify_skip'))}</button>
+          <button class="btn primary" id="clarify-next">${esc(last ? t('clarify_submit') : t('clarify_next'))} <span class="kbd-hint">Ctrl+Enter</span></button>
+        </div>
+      </div>`;
+
+    box.querySelectorAll('.clarify-opt').forEach(card => {
+      card.addEventListener('click', (e) => {
+        picks[idx].value = card.dataset.val;
+        if (card.dataset.val === '__other__') {
+          render();
+          const inp = box.querySelector('#clarify-other-input');
+          if (inp) inp.focus();
+          return;
+        }
+        render();
+      });
+    });
+    const oin = box.querySelector('#clarify-other-input');
+    if (oin) {
+      oin.addEventListener('input', () => { picks[idx].text = oin.value; });
+      oin.addEventListener('click', (e) => e.stopPropagation());
+    }
+    box.querySelector('#clarify-close').addEventListener('click', close);
+    box.querySelector('#clarify-back').addEventListener('click', () => { if (idx > 0) { idx--; render(); } });
+    box.querySelector('#clarify-skip').addEventListener('click', finalize); // остальное = дефолты
+    box.querySelector('#clarify-next').addEventListener('click', () => {
+      if (last) finalize(); else { idx++; render(); }
+    });
+  }
+
+  ov.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      (idx === questions.length - 1) ? finalize() : (idx++, render());
+    } else if (e.key === 'Escape') { e.preventDefault(); close(); }
   });
+  render();
 }
 
 /* ---------- agents ---------- */
@@ -400,6 +473,7 @@ async function loadSettings() {
   const hermesOk = state.settings.hermesAvailable;
   const opencodeOk = state.settings.opencodeAvailable;
   $('#set-engine').value = mode;
+  $('#set-model-cap').value = state.settings.claudeModelCap || 'sonnet';
   // Статус Hermes
   (async () => {
     const st = await window.aura.hermesStatus();
@@ -623,6 +697,7 @@ $('#btn-save-settings').addEventListener('click', async () => {
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,
     reviewEnabled: $('#set-review').checked,
     orchestratorMode: $('#set-engine').value,
+    claudeModelCap: $('#set-model-cap').value,
     useHermesEngine: false,
     telegramEnabled: $('#set-tg-enabled').checked,
     telegramToken: $('#set-tg-token').value.trim(),
@@ -855,6 +930,7 @@ $('#btn-harness-run').addEventListener('click', async () => {
   const input = $('#harness-input').value.trim();
   if (!input) return;
   $('#harness-input').value = '';
+  autoGrow($('#harness-input'));
   await window.aura.harness.start(input);
   gotoDashboard();
 });
@@ -877,6 +953,7 @@ $('#btn-loop-run').addEventListener('click', async () => {
     costCapUsd: parseFloat($('#loop-cap').value) || 0
   };
   $('#loop-input').value = '';
+  autoGrow($('#loop-input'));
   await window.aura.loop.start(input, opts);
   gotoDashboard();
 });
@@ -953,6 +1030,48 @@ async function loadProStatus() {
   }
 }
 
+/* ---------- Авто-обновление ---------- */
+function renderUpdate(s) {
+  if (!s) return;
+  const elV = $('#update-version'); if (elV) elV.textContent = 'v' + (s.current || '');
+  const el = $('#update-status'); const inst = $('#btn-update-install');
+  let msg = '', ready = false;
+  switch (s.status) {
+    case 'checking': msg = t('update_checking'); break;
+    case 'available': msg = t('update_available') + ' v' + (s.version || ''); break;
+    case 'downloading': msg = t('update_downloading') + ' ' + (s.progress || 0) + '%'; break;
+    case 'downloaded': msg = t('update_ready') + ' v' + (s.version || ''); ready = true; break;
+    case 'latest': msg = t('update_latest'); break;
+    case 'error': msg = t('update_error') + ': ' + (s.error || ''); break;
+    case 'portable': msg = t('update_portable'); break;
+    case 'dev': msg = t('update_dev'); break;
+    default: msg = '';
+  }
+  if (el) el.textContent = msg;
+  if (inst) inst.style.display = ready ? '' : 'none';
+  updateBanner(ready ? (t('update_ready') + ' v' + (s.version || '')) : '');
+}
+function updateBanner(text) {
+  let b = document.getElementById('update-banner');
+  if (!text) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'update-banner';
+    b.innerHTML = `<span id="update-banner-text"></span>
+      <button class="btn primary" id="update-banner-install">${esc(t('update_install'))}</button>
+      <button class="btn ghost" id="update-banner-dismiss">✕</button>`;
+    document.body.appendChild(b);
+    b.querySelector('#update-banner-install').addEventListener('click', () => window.aura.update.install());
+    b.querySelector('#update-banner-dismiss').addEventListener('click', () => b.remove());
+  }
+  b.querySelector('#update-banner-text').textContent = text;
+}
+if (window.aura.update) {
+  window.aura.update.onStatus(renderUpdate);
+  $('#btn-update-check').addEventListener('click', () => { window.aura.update.check(); });
+  $('#btn-update-install').addEventListener('click', () => window.aura.update.install());
+}
+
 /* ---------- init ---------- */
 /* ---------- Boot splash ---------- */
 (function boot() {
@@ -999,4 +1118,5 @@ async function loadProStatus() {
     if (logs) Object.assign(state.logs, logs);
   } catch (_) {}
   renderTasks();
+  try { if (window.aura.update) renderUpdate(await window.aura.update.get()); } catch (_) {}
 })();

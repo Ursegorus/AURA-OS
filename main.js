@@ -15,6 +15,7 @@ const { AgentManager } = require('./src/agents');
 const { Memory } = require('./src/memory');
 const { Orchestrator } = require('./src/orchestrator');
 const { TelegramTerminal } = require('./src/telegram');
+const updater = require('./src/updater');
 
 // ---------- tiny JSON settings store ----------
 class Store {
@@ -318,6 +319,7 @@ app.whenReady().then(() => {
   // Окно — СРАЗУ. Тяжёлая настройка идёт за сплэшем в фоне.
   createWindow();
   runSetup();
+  updater.init(win); // авто-обновление (no-op в dev/portable)
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => {
@@ -386,6 +388,11 @@ ipcMain.handle('clarify:answer', (_e, { taskId, answers }) => orchestrator.resol
 ipcMain.handle('harness:plan', (_e, input) => orchestrator.planHarness(input));
 ipcMain.handle('harness:start', (_e, { input, opts }) => orchestrator.startHarness(input, opts || {}));
 
+// ---------- Авто-обновление ----------
+ipcMain.handle('update:get', () => updater.state());
+ipcMain.handle('update:check', () => updater.check());
+ipcMain.handle('update:install', () => updater.install());
+
 // ---------- Ralph Loop ----------
 ipcMain.handle('loop:start', (_e, { input, opts }) => orchestrator.startLoop(input, opts || {}));
 ipcMain.handle('loop:stop', (_e, id) => orchestrator.stopLoop(id));
@@ -423,7 +430,10 @@ ipcMain.handle('settings:get', () => ({
   hermesProfile: store.get('hermesProfile', ''),
   knowledgePath: store.get('knowledgePath', ''),
   openrouterKey: store.get('openrouterKey', ''),
-  soulPath: store.get('soulPath', '')
+  soulPath: store.get('soulPath', ''),
+  // Потолок модели Claude: haiku/sonnet/opus. По умолчанию sonnet — бережёт
+  // 5-часовой лимит подписки. Opus только если поднять вручную.
+  claudeModelCap: store.get('claudeModelCap', 'sonnet')
 }));
 ipcMain.handle('settings:set', (_e, patch) => {
   const tgKeys = ['telegramEnabled', 'telegramToken', 'telegramAllowed'];

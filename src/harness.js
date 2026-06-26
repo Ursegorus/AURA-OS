@@ -36,6 +36,17 @@ const CORE_PATTERNS = ['single', 'loop-until-done', 'fan-out-synthesize'];
 /** Маркер завершения, который агент печатает, когда вся цель достигнута. */
 const DONE_SENTINEL = 'AURA_LOOP_DONE';
 
+// Признаки того, что агент упёрся в лимит подписки/квоту (не настоящий ответ).
+const LIMIT_RE = /(hit your (?:session|usage) limit|session limit\b|usage limit\b|rate limit|quota exceeded|out of (?:credits|tokens|quota)|insufficient (?:credits|quota)|лимит\b.*(?:исчерпан|превышен)|превыш\w* лимит)/i;
+/** Если вывод агента — сообщение о лимите, вернуть эту строку, иначе ''. */
+function detectLimit(text) {
+  const s = String(text || '');
+  if (!LIMIT_RE.test(s)) return '';
+  // Берём конкретную строку с лимитом (часто содержит время сброса).
+  const line = s.split(/\r?\n/).find(l => LIMIT_RE.test(l));
+  return (line || s).trim().slice(0, 200);
+}
+
 // ---------- Подбор агента под задачу (общий для Harness и Loop) ----------
 // В режиме «авто» нельзя брать первого по списку — нужен наиболее подходящий по
 // навыкам (напр. задача с веб-поиском → агент со skill 'web-search':
@@ -105,13 +116,17 @@ class HarnessEngine {
    */
   async _askClarify(task, agent, cwd, plan) {
     if (this.store.get('clarifyEnabled', true) === false) return '';
+    // Clarify — это ЛИШНИЙ вызов агента перед задачей. На тривиальных задачах
+    // он не окупается и зря жжёт лимит подписки → пропускаем.
+    if (plan && plan.complexity === 'trivial') return '';
     const prompt = [
       'Прежде чем выполнять задачу ниже, определи до 3 ПО-НАСТОЯЩЕМУ неоднозначных решений,',
       'которые существенно влияют на результат и которые стоит уточнить у пользователя',
       '(например: недостающие факты, выбор формата/стиля, что считать источником истины).',
       'НЕ выдумывай данные и НЕ задавай вопросы ради галочки. Если всё однозначно — верни [].',
       'Ответь ТОЛЬКО валидным JSON-массивом, без markdown и пояснений. Формат элемента:',
-      '{"question":"...","options":["вариант1","вариант2"],"recommended":"вариант1"}',
+      '{"question":"...","options":[{"label":"короткий вариант","description":"что это значит и к чему приведёт"}],"recommended":"короткий вариант"}',
+      'label — 1–4 слова; description — одно предложение с сутью/последствием. recommended = label лучшего варианта.',
       '',
       'ЗАДАЧА:',
       '"""' + task.input + '"""'
@@ -123,13 +138,30 @@ class HarnessEngine {
       });
       out = res.output || '';
     } catch (_) { return ''; }
+    // Если агент упёрся в лимит — не парсим мусор как вопросы, сообщаем прямо.
+    const limit = detectLimit(out);
+    if (limit) {
+      this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: `[AURA] ⛔ Лимит агента на этапе уточнения: ${limit}\n` });
+      return '';
+    }
     let questions = [];
     try {
       const m = out.match(/\[[\s\S]*\]/);
       if (m) questions = JSON.parse(m[0]);
     } catch (_) { return ''; }
+    // Нормализуем варианты к {label, description} (агент мог вернуть строки
+    // по старому контракту — поддерживаем обе формы).
     questions = (Array.isArray(questions) ? questions : [])
       .filter(q => q && q.question && Array.isArray(q.options) && q.options.length)
+      .map(q => ({
+        question: String(q.question),
+        recommended: typeof q.recommended === 'object' ? (q.recommended && q.recommended.label) : q.recommended,
+        options: q.options.map(o => typeof o === 'string'
+          ? { label: o, description: '' }
+          : { label: String(o.label || o.value || ''), description: String(o.description || '') }
+        ).filter(o => o.label)
+      }))
+      .filter(q => q.options.length)
       .slice(0, 3);
     if (!questions.length) return '';
 
@@ -139,7 +171,7 @@ class HarnessEngine {
     const answers = await new Promise(resolve => {
       const timer = setTimeout(() => {
         this._clarifyResolvers.delete(task.id);
-        resolve(questions.map(q => ({ question: q.question, answer: q.recommended || q.options[0] })));
+        resolve(questions.map(q => ({ question: q.question, answer: q.recommended || q.options[0].label })));
       }, 5 * 60 * 1000);
       this._clarifyResolvers.set(task.id, (ans) => { clearTimeout(timer); resolve(ans); });
     });
@@ -232,10 +264,24 @@ class HarnessEngine {
   _modelFor(agent, complexity) {
     const pro = this.getPro();
     if (pro && typeof pro.routeModel === 'function') {
-      try { return pro.routeModel(pro.patchAgentDef ? pro.patchAgentDef({ ...agent }) : agent, complexity); }
-      catch (_) { return undefined; }
+      try {
+        const m = pro.routeModel(pro.patchAgentDef ? pro.patchAgentDef({ ...agent }) : agent, complexity);
+        return this._capModel(agent, m);
+      } catch (_) { return undefined; }
     }
     return undefined;
+  }
+
+  // Потолок модели: защищает 5-часовой лимит подписки. По умолчанию Claude
+  // не поднимается выше Sonnet (Opus жжёт лимит) — Opus только если пользователь
+  // явно поднял потолок в настройках. Касается только claude-code.
+  _capModel(agent, model) {
+    if (!model || !agent || agent.id !== 'claude-code') return model;
+    const cap = this.store.get('claudeModelCap', 'sonnet');
+    if (cap === 'opus') return model; // без потолка
+    const tier = (m) => { const s = String(m).toLowerCase(); if (s.includes('opus')) return 2; if (s.includes('sonnet')) return 1; if (s.includes('haiku')) return 0; return 1; };
+    const capIdx = { haiku: 0, sonnet: 1, opus: 2 }[cap] ?? 1;
+    return tier(model) > capIdx ? cap : model;
   }
 
   _withConstraints(prompt) {
@@ -267,7 +313,19 @@ class HarnessEngine {
 
     // Ранжируем под задачу: в «авто» первым должен быть наиболее подходящий агент,
     // а не первый по списку (все пути выбора в итоге падают на порядок available).
-    const available = rankAgents(await this._available(), input);
+    let available = rankAgents(await this._available(), input);
+    // Явный выбор движка пользователем («Оркестратор» в настройках) харнес тоже
+    // обязан уважать: если выбран конкретный агент — ставим его первым, а не
+    // ранжированного по навыкам. «auto»/«legacy» → ранжирование как есть.
+    const mode = this.store.get('orchestratorMode', 'auto');
+    const forcedId = { claude: 'claude-code', hermes: 'hermes', opencode: 'opencode' }[mode];
+    if (forcedId) {
+      const forced = available.find(a => a.id === forcedId);
+      if (forced) {
+        available = [forced, ...available.filter(a => a.id !== forcedId)];
+        this.emit({ type: 'log', taskId, agent: 'aura', text: `[AURA] Движок выбран вручную: ${forced.name}.\n` });
+      }
+    }
     if (available.length === 0) {
       task.status = 'failed';
       task.summary = 'Нет установленных агентов.';
@@ -350,6 +408,12 @@ class HarnessEngine {
     });
     st.output = res.output; st.status = res.ok ? 'done' : 'failed';
     task.summary = res.output.slice(-1200);
+    const limit = detectLimit(res.output);
+    if (limit) {
+      st.status = 'failed'; task.status = 'failed';
+      task.summary = `⛔ Агент исчерпал лимит подписки и не выполнил задачу:\n${limit}\nПопробуй позже или смени агента/модель.`;
+      this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: `\n[AURA] ⛔ Лимит агента «${agent.name}»: ${limit}\n` });
+    }
   }
 
   /** Fan-out: разбить на под-объекты, запустить параллельно, синтезировать. */
@@ -449,8 +513,11 @@ class HarnessEngine {
     const pro = this.getPro();
     if (pro && pro.selfImproving && typeof pro.selfImproving.learnFromVerdict === 'function') {
       try {
-        const verdict = task.subtasks.filter(s => s.role === 'reviewer').map(s => s.output).join('\n') || task.summary;
-        const rules = pro.selfImproving.learnFromVerdict(verdict) || [];
+        // Учимся ТОЛЬКО на вердикте настоящего ревьюера (adversarial/tournament/loop).
+        // Раньше был фолбэк на task.summary → обычные задачи (single) засоряли
+        // CONSTRAINTS.md нарративом и даже clarify-вопросами.
+        const verdict = task.subtasks.filter(s => s.role === 'reviewer').map(s => s.output).join('\n');
+        const rules = verdict.trim() ? (pro.selfImproving.learnFromVerdict(verdict) || []) : [];
         for (const rule of rules) {
           if (this.memory.appendConstraint) this.memory.appendConstraint(rule, 'harness:' + task.pattern);
         }
@@ -529,10 +596,22 @@ class LoopRunner {
   _modelFor(agent, complexity) {
     const pro = this.getPro();
     if (pro && typeof pro.routeModel === 'function') {
-      try { return pro.routeModel(pro.patchAgentDef ? pro.patchAgentDef({ ...agent }) : agent, complexity || 'complex'); }
-      catch (_) { return undefined; }
+      try {
+        const m = pro.routeModel(pro.patchAgentDef ? pro.patchAgentDef({ ...agent }) : agent, complexity || 'complex');
+        return this._capModel(agent, m);
+      } catch (_) { return undefined; }
     }
     return undefined;
+  }
+
+  // Потолок модели — тот же, что в харнесе (loop особенно жрёт лимит).
+  _capModel(agent, model) {
+    if (!model || !agent || agent.id !== 'claude-code') return model;
+    const cap = this.store.get('claudeModelCap', 'sonnet');
+    if (cap === 'opus') return model;
+    const tier = (m) => { const s = String(m).toLowerCase(); if (s.includes('opus')) return 2; if (s.includes('sonnet')) return 1; if (s.includes('haiku')) return 0; return 1; };
+    const capIdx = { haiku: 0, sonnet: 1, opus: 2 }[cap] ?? 1;
+    return tier(model) > capIdx ? cap : model;
   }
 
   _withConstraints(prompt) {
@@ -615,6 +694,13 @@ class LoopRunner {
       loop.iteration++;
       const out = await this._runIteration(loop, agent, loop.autonomy, lastOutput, backpressure);
       lastOutput = out;
+
+      // Лимит подписки в цикле особенно опасен (итерации множат расход) → стоп.
+      const limit = detectLimit(out);
+      if (limit) {
+        this.emit({ type: 'log', taskId: loop.id, agent: 'aura', text: `\n[AURA] ⛔ Лимит агента «${agent.name}»: ${limit}. Цикл остановлен.\n` });
+        break;
+      }
 
       // backpressure: прогон тест-команды (ограничитель)
       backpressure = '';

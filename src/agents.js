@@ -75,6 +75,10 @@ const BUILTIN_AGENTS = [
     // править файлы и запускать команды. addDirFlag даёт доступ к папкам вне cwd.
     args: ['-p', '--dangerously-skip-permissions', '{prompt}'],
     addDirFlag: '--add-dir',
+    // Claude CLI принимает алиасы моделей: --model haiku|sonnet|opus. Флаг
+    // глобальный, ставится перед -p. Нужен, чтобы AURA реально управляла
+    // моделью (а не показывала ярлык, не передавая его в CLI).
+    modelFlag: '--model',
     stdinPrompt: true,
     needsShell: false,
     detectArgs: ['--version'],

@@ -129,14 +129,85 @@ input, textarea, select {
   width: 100%; outline: none;
 }
 input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+/* Радио/чекбоксы не должны растягиваться на 100% (иначе ломают строки-варианты). */
+input[type="radio"], input[type="checkbox"] { width: auto; }
 
 /* ---------- Composer ---------- */
 .composer {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 16px; margin-bottom: 22px;
 }
-.composer textarea { background: transparent; border: none; resize: vertical; font-size: 15px; }
+/* Поле ввода авто-растёт под текст (JS), но не выше окна — max-height страхует. */
+.composer textarea {
+  background: transparent; border: none; resize: none; font-size: 15px;
+  display: block; overflow-y: hidden; min-height: 56px; max-height: 60vh; line-height: 1.5;
+}
 .composer-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+
+/* ---------- Clarify (прямой вопрос с вариантами — как в Claude) ---------- */
+.clarify-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+.clarify-box {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); max-width: 600px; width: 92%; max-height: 86vh;
+  overflow: auto; padding: 24px; box-shadow: 0 8px 40px rgba(0,0,0,.5);
+}
+/* Шапка: прогресс N/N + вопрос + закрыть */
+.clarify-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+.clarify-progress {
+  flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--muted);
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 99px; padding: 2px 9px; margin-top: 1px;
+}
+.clarify-q-title { font-weight: 600; font-size: 15.5px; line-height: 1.4; flex: 1; }
+.clarify-x {
+  flex-shrink: 0; background: none; border: none; color: var(--muted);
+  font-size: 15px; cursor: pointer; padding: 2px 4px; border-radius: 6px; line-height: 1;
+}
+.clarify-x:hover { background: var(--card2); color: var(--text); }
+
+/* Карточки-варианты: текст слева (заголовок+описание), селектор справа */
+.clarify-opts { margin-bottom: 18px; }
+.clarify-opt {
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; margin-bottom: 8px; transition: border-color .12s, background .12s;
+  background: var(--bg2);
+}
+.clarify-opt:hover { border-color: var(--accent); }
+.clarify-opt.selected { border-color: var(--accent); background: rgba(108,140,255,.10); }
+.clarify-opt-main { flex: 1; min-width: 0; }
+.clarify-opt-label { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.clarify-opt-desc { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 3px; }
+.clarify-rec { color: var(--warn); font-weight: 600; margin-left: 8px; white-space: nowrap; font-size: 12.5px; }
+/* Индикатор выбора справа (как чек у Claude) */
+.clarify-check {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 6px;
+  border: 1.5px solid var(--border); position: relative; transition: all .12s;
+}
+.clarify-opt.selected .clarify-check { border-color: var(--accent); background: var(--accent); }
+.clarify-opt.selected .clarify-check::after {
+  content: ''; position: absolute; left: 6px; top: 2.5px; width: 5px; height: 10px;
+  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.clarify-other-input { margin-top: 8px; width: 100%; }
+/* Футер: Back слева, Skip+Submit справа */
+.clarify-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.clarify-actions-right { display: flex; gap: 8px; }
+.kbd-hint { opacity: .65; font-size: 11px; margin-left: 4px; }
+
+/* ---------- Авто-обновление ---------- */
+.update-status { font-size: 13px; color: var(--muted); min-height: 18px; }
+#update-banner {
+  position: fixed; bottom: 18px; right: 18px; z-index: 9998;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--accent); border-radius: 12px;
+  padding: 12px 14px; box-shadow: 0 8px 30px rgba(0,0,0,.45); max-width: 380px;
+}
+#update-banner-text { font-size: 13.5px; flex: 1; }
+#update-banner .btn { padding: 7px 12px; font-size: 13px; }
 
 /* ---------- Tasks ---------- */
 .task-list { display: flex; flex-direction: column; gap: 16px; }
