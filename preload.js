@@ -19,7 +19,10 @@ contextBridge.exposeInMainWorld('aura', {
   task: {
     start: (input) => ipcRenderer.invoke('task:start', input),
     cancel: (id) => ipcRenderer.invoke('task:cancel', id),
-    list: () => ipcRenderer.invoke('task:list')
+    list: () => ipcRenderer.invoke('task:list'),
+    logs: (ids) => ipcRenderer.invoke('task:logs', ids),
+    clearHistory: () => ipcRenderer.invoke('task:clearHistory'),
+    clarifyAnswer: (taskId, answers) => ipcRenderer.invoke('clarify:answer', { taskId, answers })
   },
   harness: {
     plan: (input) => ipcRenderer.invoke('harness:plan', input),
@@ -42,13 +45,15 @@ contextBridge.exposeInMainWorld('aura', {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch) => ipcRenderer.invoke('settings:set', patch),
-    pickFolder: (title) => ipcRenderer.invoke('settings:pickFolder', title)
+    pickFolder: (title) => ipcRenderer.invoke('settings:pickFolder', title),
+    pickFile: (title) => ipcRenderer.invoke('settings:pickFile', title)
   },
   memory: {
     list: () => ipcRenderer.invoke('memory:list'),
     read: (p) => ipcRenderer.invoke('memory:read', p),
     openVault: () => ipcRenderer.invoke('memory:openVault'),
     getGraphHTML: () => ipcRenderer.invoke('memory:getGraphHTML'),
+    getGraph: () => ipcRenderer.invoke('memory:getGraph'),
     auditTemplate: () => ipcRenderer.invoke('memory:auditTemplate'),
     tree: (dir) => ipcRenderer.invoke('memory:tree', dir)
   },
@@ -57,15 +62,24 @@ contextBridge.exposeInMainWorld('aura', {
     onStatus: (cb) => ipcRenderer.on('telegram-status', (_e, data) => cb(data))
   },
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
+  setup: {
+    status: () => ipcRenderer.invoke('setup:status'),
+    onProgress: (cb) => ipcRenderer.on('setup:progress', (_e, data) => cb(data)),
+    onDone: (cb) => ipcRenderer.on('setup:done', (_e, data) => cb(data))
+  },
+  logs: {
+    open: () => ipcRenderer.invoke('logs:open'),
+    openDir: () => ipcRenderer.invoke('logs:openDir'),
+    tail: (n) => ipcRenderer.invoke('logs:tail', n)
+  },
   onEvent: (cb) => ipcRenderer.on('aura-event', (_e, data) => cb(data)),
   hermesExec: (opts) => ipcRenderer.invoke('hermes:exec', opts),
   hermesSyncToObsidian: () => ipcRenderer.invoke('hermes:syncToObsidian'),
   skillsSearch: (opts) => ipcRenderer.invoke('skills:search', opts),
   skillsInspect: (id) => ipcRenderer.invoke('skills:inspect', id),
   skillsInstall: (id) => ipcRenderer.invoke('skills:install', id),
-  aifreeToggle: (enabled) => ipcRenderer.invoke('aifree:toggle', enabled),
-  aifreePing: () => ipcRenderer.invoke('aifree:ping'),
   shellOpenExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   agentsInstall: (opts) => ipcRenderer.invoke('agents:install', opts),
+  agentsUninstall: (opts) => ipcRenderer.invoke('agents:uninstall', opts),
   hermesStatus: () => ipcRenderer.invoke('hermes:status')
 });

@@ -5,6 +5,12 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const { logger } = require('./src/logger');
+logger.init(path.join(app.getPath('userData'), 'logs'));
+
+const taskStore = require('./src/taskstore');
+taskStore.init(path.join(app.getPath('userData'), 'logs'));
+
 const { AgentManager } = require('./src/agents');
 const { Memory } = require('./src/memory');
 const { Orchestrator } = require('./src/orchestrator');
@@ -35,7 +41,9 @@ if (audit.updated) {
 }
 
 // Fan out orchestrator events to both the UI and the Telegram terminal.
+// Заодно персистим историю задач и их логи на диск (переживают перезапуск/краш).
 function dispatchEvent(event) {
+  taskStore.record(event);
   if (win && !win.isDestroyed()) win.webContents.send('aura-event', event);
   if (telegram) telegram.onAuraEvent(event);
 }
@@ -218,48 +226,28 @@ async function ensureRuntime() {
   return { node: nodeOk, python: pythonOk };
 }
 
-// ---------- Auto-install / update Hermes Agent (движок обязателен) ----------
+// ---------- Hermes Agent — ОПЦИОНАЛЬНЫЙ движок ----------
+// Раньше Hermes был обязательным и ставился авто-`npm install -g` при старте.
+// Это требовало подписки/ключа и ломало обещание «просто работает» (отзыв 1.0.3).
+// Теперь: если Hermes есть — используем; если нет — не трогаем и не ставим.
+// Установка — только осознанно, через UI.
 function ensureHermes() {
   return new Promise(resolve => {
     const { spawn } = require('child_process');
     const isWin = process.platform === 'win32';
-
-    // Проверяем, установлен ли Hermes
     const test = spawn(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', 'hermes --version 2>&1'], { windowsHide: true });
     let verOut = '';
     test.stdout.on('data', d => verOut += d.toString());
     test.stderr.on('data', d => verOut += d.toString());
+    test.on('error', () => resolve(false));
     test.on('close', (code) => {
       if (code === 0) {
         const ver = verOut.match(/\d+\.\d+\.\d+/);
-        console.log('[AURA] Hermes Agent найден: v' + (ver ? ver[0] : '?'));
-        // Проверяем обновление (hermes update)
-        const upd = spawn(isWin ? 'cmd.exe' : 'sh', [isWin ? '/c' : '-c', 'hermes update 2>&1'], { windowsHide: true });
-        let updOut = '';
-        upd.stdout.on('data', d => updOut += d.toString());
-        upd.stderr.on('data', d => updOut += d.toString());
-        upd.on('close', () => {
-          if (updOut.includes('updated') || updOut.includes('Updated')) console.log('[AURA] Hermes обновлён');
-          resolve(true);
-        });
+        console.log('[AURA] Hermes Agent найден: v' + (ver ? ver[0] : '?') + ' (опциональный движок)');
+        resolve(true);
       } else {
-        console.log('[AURA] Hermes Agent не найден — устанавливаю...');
-        const install = spawn(isWin ? 'cmd.exe' : 'sh',
-          [isWin ? '/c' : '-c', 'npm install -g hermes-agent 2>&1'],
-          { windowsHide: true });
-        let installOut = '';
-        install.stdout.on('data', d => installOut += d.toString());
-        install.stderr.on('data', d => installOut += d.toString());
-        install.on('close', (code2) => {
-          if (code2 === 0) {
-            console.log('[AURA] Hermes Agent установлен');
-            resolve(true);
-          } else {
-            console.log('[AURA] Не удалось установить Hermes. Установите вручную: npm install -g hermes-agent');
-            console.log(installOut);
-            resolve(false);
-          }
-        });
+        console.log('[AURA] Hermes Agent не установлен — это нормально, движок опциональный.');
+        resolve(false);
       }
     });
   });
@@ -273,6 +261,7 @@ function createWindow() {
     minHeight: 640,
     frame: false,
     backgroundColor: '#0b0f17',
+    show: false,
     autoHideMenuBar: true,
     title: 'AURA OS',
     icon: path.join(__dirname, 'renderer', 'icon.png'),
@@ -283,6 +272,10 @@ function createWindow() {
     }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // Показываем окно как только отрисовался первый кадр — никакого «висит
+  // в диспетчере, на экране пусто». Среда (Node/Python/Hermes/движки)
+  // догружается в фоне за сплэшем, см. runSetup().
+  win.once('ready-to-show', () => { win.show(); });
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -291,12 +284,40 @@ function createWindow() {
   win.on('unmaximize', () => win.webContents.send('window:unmaximized'));
 }
 
-app.whenReady().then(async () => {
-  await ensureRuntime();
-  await ensureHermes();
-  await orchestrator.detectEngines();
+// ---------- Прогресс начальной настройки (для сплэша) ----------
+const setupState = { done: false, pct: 0, step: 'boot', text: 'Запуск…', steps: [] };
+function emitSetup(step, text, pct) {
+  setupState.step = step;
+  setupState.text = text;
+  if (typeof pct === 'number') setupState.pct = pct;
+  setupState.steps.push({ step, text, t: Date.now() });
+  console.log(`[AURA][setup] ${pct != null ? pct + '% ' : ''}${text}`);
+  if (win && !win.isDestroyed()) win.webContents.send('setup:progress', { ...setupState });
+}
+
+async function runSetup() {
+  try {
+    emitSetup('runtime', 'Проверяю окружение (Node.js / Python)…', 10);
+    await ensureRuntime();
+    emitSetup('hermes', 'Проверяю движки…', 55);
+    await ensureHermes();
+    emitSetup('engines', 'Определяю доступные движки и агентов…', 80);
+    await orchestrator.detectEngines();
+    telegram.restart().catch(() => {});
+    emitSetup('ready', 'Готово', 100);
+  } catch (e) {
+    console.error('[AURA] runSetup error:', e);
+    emitSetup('ready', 'Готово (с предупреждениями)', 100);
+  } finally {
+    setupState.done = true;
+    if (win && !win.isDestroyed()) win.webContents.send('setup:done', { ...setupState });
+  }
+}
+
+app.whenReady().then(() => {
+  // Окно — СРАЗУ. Тяжёлая настройка идёт за сплэшем в фоне.
   createWindow();
-  telegram.restart().catch(() => {});
+  runSetup();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => {
@@ -328,21 +349,38 @@ ipcMain.handle('agents:toggle', (_e, { id, enabled }) => {
 
 ipcMain.handle('agents:install', async (_e, { command }) => {
   return new Promise(resolve => {
-    // Пробуем npm install -g, если не сработает — pip install
     const cmd = `npm install -g ${command}`;
-    const child = require('child_process').spawn(process.platform === 'win32' ? 'cmd.exe' : 'sh', 
+    console.log('[AURA] agents:install ' + command);
+    const child = require('child_process').spawn(process.platform === 'win32' ? 'cmd.exe' : 'sh',
       [process.platform === 'win32' ? '/c' : '-c', cmd],
       { windowsHide: true });
     let out = '';
     child.stdout.on('data', d => { out += d.toString(); });
     child.stderr.on('data', d => { out += d.toString(); });
-    child.on('close', (code) => resolve({ ok: code === 0, output: out.trim(), code }));
+    child.on('close', (code) => { console.log('[AURA] agents:install ' + command + ' → code ' + code); resolve({ ok: code === 0, output: out.trim(), code }); });
+  });
+});
+
+ipcMain.handle('agents:uninstall', async (_e, { command }) => {
+  return new Promise(resolve => {
+    const cmd = `npm uninstall -g ${command}`;
+    console.log('[AURA] agents:uninstall ' + command);
+    const child = require('child_process').spawn(process.platform === 'win32' ? 'cmd.exe' : 'sh',
+      [process.platform === 'win32' ? '/c' : '-c', cmd],
+      { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', d => { out += d.toString(); });
+    child.stderr.on('data', d => { out += d.toString(); });
+    child.on('close', (code) => { console.log('[AURA] agents:uninstall ' + command + ' → code ' + code); resolve({ ok: code === 0, output: out.trim(), code }); });
   });
 });
 
 ipcMain.handle('task:start', (_e, input) => orchestrator.startTask(input));
 ipcMain.handle('task:cancel', (_e, id) => orchestrator.cancelTask(id));
-ipcMain.handle('task:list', () => orchestrator.listTasks());
+ipcMain.handle('task:list', () => taskStore.mergeHistory(orchestrator.listTasks()));
+ipcMain.handle('task:logs', (_e, ids) => taskStore.logsFor(ids));
+ipcMain.handle('task:clearHistory', () => { taskStore.clear(); return { ok: true }; });
+ipcMain.handle('clarify:answer', (_e, { taskId, answers }) => orchestrator.resolveClarify(taskId, answers));
 
 // ---------- Dynamic Harness ----------
 ipcMain.handle('harness:plan', (_e, input) => orchestrator.planHarness(input));
@@ -377,14 +415,15 @@ ipcMain.handle('settings:get', () => ({
   telegramEnabled: store.get('telegramEnabled', false),
   telegramToken: store.get('telegramToken', ''),
   telegramAllowed: store.get('telegramAllowed', ''),
-  // Движок: auto / hermes / opencode / legacy
+  // Движок: auto / hermes / opencode / claude / legacy
   orchestratorMode: store.get('orchestratorMode', 'auto'),
   hermesAvailable: store.get('_hermesAvailable', false),
   opencodeAvailable: store.get('_opencodeAvailable', false),
+  claudeAvailable: store.get('_claudeAvailable', false),
+  hermesProfile: store.get('hermesProfile', ''),
   knowledgePath: store.get('knowledgePath', ''),
-  // AI Free
-  useAIFree: store.get('useAIFree', false),
-  aifreePath: store.get('aifreePath', '')
+  openrouterKey: store.get('openrouterKey', ''),
+  soulPath: store.get('soulPath', '')
 }));
 ipcMain.handle('settings:set', (_e, patch) => {
   const tgKeys = ['telegramEnabled', 'telegramToken', 'telegramAllowed'];
@@ -397,6 +436,13 @@ ipcMain.handle('settings:pickFolder', async (_e, title) => {
   const res = await dialog.showOpenDialog(win, { title, properties: ['openDirectory', 'createDirectory'] });
   return res.canceled ? null : res.filePaths[0];
 });
+ipcMain.handle('settings:pickFile', async (_e, title) => {
+  const res = await dialog.showOpenDialog(win, {
+    title, properties: ['openFile'],
+    filters: [{ name: 'Markdown/Text', extensions: ['md', 'txt', 'markdown'] }, { name: 'All', extensions: ['*'] }]
+  });
+  return res.canceled ? null : res.filePaths[0];
+});
 
 ipcMain.handle('memory:list', () => memory.listNotes());
 ipcMain.handle('memory:read', (_e, p) => memory.readNote(p));
@@ -405,6 +451,9 @@ ipcMain.handle('memory:openVault', () => {
 });
 ipcMain.handle('memory:getGraphHTML', () => {
   return memory.getGraphHTML();
+});
+ipcMain.handle('memory:getGraph', () => {
+  return memory.getGraphData();
 });
 ipcMain.handle('memory:auditTemplate', () => {
   return memory.auditTemplate();
@@ -428,6 +477,14 @@ ipcMain.handle('memory:tree', async (_e, dir) => {
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
 
+// ---------- Сплэш / прогресс старта ----------
+ipcMain.handle('setup:status', () => ({ ...setupState }));
+
+// ---------- Логи приложения ----------
+ipcMain.handle('logs:open', () => { const f = logger.file(); if (f) shell.openPath(f); return f; });
+ipcMain.handle('logs:openDir', () => { const d = logger.dir(); if (d) shell.openPath(d); return d; });
+ipcMain.handle('logs:tail', (_e, n) => logger.tail(n || 500));
+
 // ---------- Hermes engine: skills, cron, mcp ----------
 ipcMain.handle('hermes:status', async () => {
   const isWin = process.platform === 'win32';
@@ -444,7 +501,7 @@ ipcMain.handle('hermes:status', async () => {
 ipcMain.handle('hermes:exec', (_e, { cmd, args: cmdArgs }) => {
   return new Promise((resolve) => {
     const isWin = process.platform === 'win32';
-    const fullArgs = ['-p', 'aura-os', cmd, ...(cmdArgs || [])];
+    const fullArgs = [...hProf(), cmd, ...(cmdArgs || [])];
     const child = isWin
       ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', ...fullArgs], { windowsHide: true })
       : require('child_process').spawn('hermes', fullArgs, { windowsHide: true });
@@ -457,51 +514,21 @@ ipcMain.handle('hermes:exec', (_e, { cmd, args: cmdArgs }) => {
 
 // ---------- Skills shop ----------
 ipcMain.handle('skills:search', async (_e, { query, source }) => {
-  const args = ['-p', 'aura-os', 'skills', 'search', query];
+  const args = [...hProf(), 'skills', 'search', query];
   if (source && source !== 'all') args.push('--source', source);
   return _hermesExec(args);
 });
 
 ipcMain.handle('skills:inspect', async (_e, id) => {
-  return _hermesExec(['-p', 'aura-os', 'skills', 'inspect', id]);
+  return _hermesExec([...hProf(), 'skills', 'inspect', id]);
 });
 
 ipcMain.handle('skills:install', async (_e, id) => {
-  return _hermesExec(['-p', 'aura-os', 'skills', 'install', id]);
+  return _hermesExec([...hProf(), 'skills', 'install', id]);
 });
 
-// ---------- AI Free ----------
-/** Включить/выключить AI Free провайдер. */
-ipcMain.handle('aifree:toggle', async (_e, { enabled }) => {
-  store.set('useAIFree', enabled);
-  if (enabled) {
-    // Устанавливаем AI Free как провайдера для Hermes
-    await _hermesExec(['config', 'set', 'model.base_url', 'http://localhost:4318/v1']);
-    // AI Free использует DeepSeek — подставляем заглушку ключа (не нужен для localhost)
-    await _hermesExec(['config', 'set', 'model.api_key', 'sk-aifree-local']);
-    await _hermesExec(['config', 'set', 'model.default', 'deepseek-chat']);
-  } else {
-    // Сбрасываем
-    await _hermesExec(['config', 'set', 'model.base_url', '']);
-    await _hermesExec(['config', 'set', 'model.api_key', '']);
-    await _hermesExec(['config', 'set', 'model.default', '']);
-  }
-  return { ok: true };
-});
-
-/** Проверить, отвечает ли AI Free API. */
-ipcMain.handle('aifree:ping', async () => {
-  const http = require('http');
-  return new Promise(resolve => {
-    const req = http.get('http://localhost:4318/v1/models', (res) => {
-      let body = '';
-      res.on('data', d => body += d);
-      res.on('end', () => resolve({ ok: res.statusCode === 200, output: body.slice(0, 200) }));
-    });
-    req.on('error', () => resolve({ ok: false, output: 'AI Free not running' }));
-    req.setTimeout(3000, () => { req.destroy(); resolve({ ok: false, output: 'timeout' }); });
-  });
-});
+/** Аргументы профиля Hermes (пусто = дефолтный профиль). См. orchestrator._profileArgs. */
+function hProf() { const p = store.get('hermesProfile', ''); return p ? ['-p', p] : []; }
 
 /** Helper: run a hermes command and return { ok, output, code }. */
 function _hermesExec(args) {
@@ -525,8 +552,8 @@ ipcMain.handle('hermes:syncToObsidian', async () => {
   const listRes = await new Promise(resolve => {
     const isWin = process.platform === 'win32';
     const child = isWin
-      ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', '-p', 'aura-os', 'sessions', 'list', '--limit', '10'], { windowsHide: true })
-      : require('child_process').spawn('hermes', ['-p', 'aura-os', 'sessions', 'list', '--limit', '10'], { windowsHide: true });
+      ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', ...hProf(), 'sessions', 'list', '--limit', '10'], { windowsHide: true })
+      : require('child_process').spawn('hermes', [...hProf(), 'sessions', 'list', '--limit', '10'], { windowsHide: true });
     let out = '';
     child.stdout.on('data', d => { out += d.toString(); });
     child.stderr.on('data', d => { out += d.toString(); });
@@ -551,8 +578,8 @@ async function _exportHermesSessionsToDir(dir, listOutput) {
       const res = await new Promise(resolve => {
         const isWin = process.platform === 'win32';
         const child = isWin
-          ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', '-p', 'aura-os', 'sessions', 'export', sessionId, '--format', 'json'], { windowsHide: true })
-          : require('child_process').spawn('hermes', ['-p', 'aura-os', 'sessions', 'export', sessionId, '--format', 'json'], { windowsHide: true });
+          ? require('child_process').spawn('cmd.exe', ['/c', 'hermes', ...hProf(), 'sessions', 'export', sessionId, '--format', 'json'], { windowsHide: true })
+          : require('child_process').spawn('hermes', [...hProf(), 'sessions', 'export', sessionId, '--format', 'json'], { windowsHide: true });
         let out = '';
         child.stdout.on('data', d => { out += d.toString(); });
         child.stderr.on('data', d => { out += d.toString(); });

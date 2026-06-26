@@ -179,8 +179,55 @@ window.aura.onEvent((ev) => {
       el.textContent = state.logs[ev.taskId].slice(-12000);
       el.scrollTop = el.scrollHeight;
     }
+  } else if (ev.type === 'clarify') {
+    showClarify(ev.taskId, ev.questions || []);
   }
 });
+
+/* ---------- Уточняющие вопросы (прямой вопрос с вариантами + рекомендация) ---------- */
+function showClarify(taskId, questions) {
+  if (!questions.length) { window.aura.task.clarifyAnswer(taskId, []); return; }
+  const old = document.getElementById('clarify-overlay');
+  if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'clarify-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg-card,#23232a);color:var(--text,#e8e8ec);border:1px solid var(--border,#333);border-radius:12px;max-width:560px;width:92%;max-height:86vh;overflow:auto;padding:22px;box-shadow:0 8px 40px rgba(0,0,0,.5);';
+  let html = `<h3 style="margin:0 0 4px">${esc(t('clarify_title'))}</h3>
+    <p class="hint" style="margin:0 0 16px">${esc(t('clarify_hint'))}</p>`;
+  questions.forEach((q, i) => {
+    html += `<div style="margin-bottom:16px"><div style="font-weight:600;margin-bottom:8px">${esc(q.question)}</div>`;
+    (q.options || []).forEach((opt, j) => {
+      const rec = opt === q.recommended;
+      html += `<label style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer">
+        <input type="radio" name="cq${i}" value="${esc(opt)}" ${rec || j === 0 ? 'checked' : ''}/>
+        <span>${esc(opt)}${rec ? ' <span style="color:var(--accent-gold,#d4a843)">★ ' + esc(t('clarify_recommended')) + '</span>' : ''}</span></label>`;
+    });
+    html += `<label style="display:flex;gap:8px;align-items:center;padding:6px 8px">
+      <input type="radio" name="cq${i}" value="__other__"/>
+      <input type="text" id="cqo${i}" placeholder="${esc(t('clarify_other'))}" style="flex:1;background:var(--bg,#1a1a1e);border:1px solid var(--border,#333);border-radius:6px;color:inherit;padding:4px 8px"/></label>`;
+    html += `</div>`;
+  });
+  html += `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+    <button class="btn" id="clarify-submit">${esc(t('clarify_submit'))}</button></div>`;
+  box.innerHTML = html;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  box.querySelectorAll('#cqo0,[id^="cqo"]').forEach((inp, i) => {
+    inp.addEventListener('focus', () => { const r = box.querySelector(`input[name="cq${i}"][value="__other__"]`); if (r) r.checked = true; });
+  });
+  $('#clarify-submit').addEventListener('click', () => {
+    const answers = questions.map((q, i) => {
+      const sel = box.querySelector(`input[name="cq${i}"]:checked`);
+      let val = sel ? sel.value : (q.recommended || q.options[0]);
+      if (val === '__other__') { const o = box.querySelector('#cqo' + i); val = (o && o.value.trim()) || q.recommended || q.options[0]; }
+      return { question: q.question, answer: val };
+    });
+    window.aura.task.clarifyAnswer(taskId, answers);
+    ov.remove();
+  });
+}
 
 /* ---------- agents ---------- */
 function agentInitial(name) { return (name || '?').trim()[0].toUpperCase(); }
@@ -194,28 +241,48 @@ async function loadAgents() {
     $('#agents-grid').innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">⬡</div>
-        <h3>У вас нет установленных AI-агентов</h3>
-        <p class="hint">Нажмите «Установить» рядом с OpenCode — получите бесплатного AI-помощника с открытым кодом. Никаких регистраций и ключей.</p>
-        <button class="btn primary" id="btn-install-opencode">+ Установить OpenCode</button>
+        <h3>Установите бесплатных агентов — за один клик</h3>
+        <p class="hint">AURA поставит OpenCode и сразу даст <b>два рабочих агента</b> на бесплатных моделях
+        (исполнитель + ревьюер). <b>Без ключей, без регистрации, без карты.</b> Нужен только Node.js — его AURA ставит сама.</p>
+        <button class="btn primary" id="btn-install-opencode">+ Установить бесплатных агентов</button>
+        <p class="hint" style="margin-top:10px">Бесплатные модели хороши для <b>ответов, черновиков и планов</b>. Для надёжных сборок («сделай лендинг», «собери приложение») подключите агента посильнее — Claude, Codex или Gemini (один клик + вход, указано на карточке).</p>
       </div>`;
     const btn = document.getElementById('btn-install-opencode');
     if (btn) {
       btn.addEventListener('click', async function() {
         this.disabled = true;
-        this.textContent = '⋯ Установка...';
-        const res = await window.aura.agentsInstall({ command: 'opencode-ai@latest' });
+        let s = 0;
+        const label = (x) => `⋯ Устанавливаю OpenCode… ${x} c (1–2 мин)`;
+        this.textContent = label(0);
+        const tick = setInterval(() => { s++; this.textContent = label(s); }, 1000);
+        const res = await window.aura.agentsInstall({ command: 'opencode-ai' });
+        clearInterval(tick);
         if (res.ok) {
-          this.textContent = '✓ Установлено!'
-          setTimeout(() => loadAgents(), 2000);
+          this.textContent = '✓ Готово — 2 агента доступны!';
+          setTimeout(() => loadAgents(), 1500);
         } else {
-          this.textContent = '✗ Ошибка. Установите Node.js и попробуйте снова.';
+          this.textContent = '✗ Ошибка. Нужен Node.js — установите и повторите.';
+          this.disabled = false;
         }
       });
     }
     return;
   }
 
-  $('#agents-grid').innerHTML = state.agents.map(a => `
+  $('#agents-grid').innerHTML = state.agents.map(a => {
+    const reqClass = a.keyless ? 'keyless' : 'needkey';
+    const reqBadge = a.keyless ? '🟢 Без ключей' : '🔑 Нужен вход / ключ';
+    const reqLine = a.requirement
+      ? `<div class="agent-req ${reqClass}"><b>${reqBadge}.</b> ${esc(a.requirement)}${a.setupUrl ? ` <a href="#" class="agent-setup-link" data-url="${esc(a.setupUrl)}">Инструкция ↗</a>` : ''}</div>`
+      : '';
+    const installBtn = (!a.available && a.installHint)
+      ? `<button class="btn primary btn-install-agent" data-cmd="${esc(a.installHint)}">Установить CLI</button>` : '';
+    const howtoBtn = (!a.available && !a.installHint && a.setupUrl)
+      ? `<button class="btn ghost btn-setup-link" data-url="${esc(a.setupUrl)}">Как установить ↗</button>` : '';
+    const removeBtn = (a.available && a.builtin && a.uninstallHint)
+      ? `<button class="btn danger btn-uninstall-agent" data-cmd="${esc(a.uninstallHint)}" data-name="${esc(a.name)}">Удалить CLI</button>` : '';
+    const delBtn = a.builtin ? '' : `<button class="btn danger" data-del="${a.id}">${t('delete')}</button>`;
+    return `
     <div class="agent-card">
       <div class="agent-top">
         <div class="agent-avatar" style="background:${a.color || '#64748b'}">${agentInitial(a.name)}</div>
@@ -225,14 +292,14 @@ async function loadAgents() {
         </div>
         <span class="agent-status pill ${a.available ? 'completed' : 'failed'}">${a.available ? t('agent_available') : t('agent_missing')}</span>
       </div>
+      ${reqLine}
       <div class="skills">${(a.skills || []).map(s => `<span class="skill-tag">${esc(s)}</span>`).join('')}</div>
       <div class="agent-cmd">$ ${esc(a.command)} ${esc((a.args || []).join(' '))}</div>
       <div class="agent-foot">
         <label class="switch"><input type="checkbox" data-toggle="${a.id}" ${a.enabled ? 'checked' : ''}/> ${t('agent_enabled')}</label>
-        ${a.builtin ? '' : `<button class="btn danger" data-del="${a.id}">${t('delete')}</button>`}
-        ${!a.available && a.installHint ? `<button class="btn primary btn-install-agent" data-cmd="${esc(a.installHint)}">Установить</button>` : ''}
+        ${delBtn}${installBtn}${howtoBtn}${removeBtn}
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
 
   $$('[data-toggle]').forEach(el => el.addEventListener('change', () =>
     window.aura.agents.toggle(el.dataset.toggle, el.checked)));
@@ -240,19 +307,35 @@ async function loadAgents() {
     await window.aura.agents.remove(el.dataset.del);
     loadAgents();
   }));
-  // One-click install
+  $$('.agent-setup-link, .btn-setup-link').forEach(el => el.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    if (el.dataset.url) window.aura.shellOpenExternal(el.dataset.url);
+  }));
+  // One-click install CLI
   $$('.btn-install-agent').forEach(el => el.addEventListener('click', async function() {
     const cmd = this.dataset.cmd;
     this.disabled = true;
-    this.textContent = '⋯';
+    let s = 0;
+    this.title = 'Установка может занять 1–2 минуты';
+    this.textContent = '⋯ 0 c';
+    const tick = setInterval(() => { s++; this.textContent = `⋯ ${s} c`; }, 1000);
     const res = await window.aura.agentsInstall({ command: cmd });
-    if (res.ok) {
-      this.textContent = '[OK]';
-      setTimeout(() => loadAgents(), 2000);
-    } else {
-      this.textContent = '✗ Ошибка';
-      setTimeout(() => { this.textContent = 'Установить'; this.disabled = false; }, 3000);
-    }
+    clearInterval(tick);
+    if (res.ok) { this.textContent = '[OK]'; setTimeout(() => loadAgents(), 1500); }
+    else { this.textContent = '✗ Ошибка'; setTimeout(() => { this.textContent = 'Установить CLI'; this.disabled = false; }, 3000); }
+  }));
+  // One-click uninstall CLI
+  $$('.btn-uninstall-agent').forEach(el => el.addEventListener('click', async function() {
+    const cmd = this.dataset.cmd;
+    if (!window.confirm(`Удалить CLI «${this.dataset.name}» (npm uninstall -g ${cmd})?\nЕсли на этом CLI работают несколько агентов — пропадут все.`)) return;
+    this.disabled = true;
+    let s = 0;
+    this.textContent = '⋯ 0 c';
+    const tick = setInterval(() => { s++; this.textContent = `⋯ ${s} c`; }, 1000);
+    const res = await window.aura.agentsUninstall({ command: cmd });
+    clearInterval(tick);
+    if (res.ok) { this.textContent = 'Удалено'; setTimeout(() => loadAgents(), 1200); }
+    else { this.textContent = '✗ Ошибка'; setTimeout(() => { this.textContent = 'Удалить CLI'; this.disabled = false; }, 3000); }
   }));
 }
 
@@ -284,9 +367,9 @@ async function loadMemory() {
     return;
   }
   list.innerHTML = notes.map(n => `
-    <div class="memory-item ${state.activeNote === n.path ? 'active' : ''}" data-note="${esc(n.path)}">
+    <div class="memory-item ${state.activeNote === n.path ? 'active' : ''}" data-note="${esc(n.path)}" title="${esc(n.rel || n.name)}">
       <div>${esc(n.name.replace('.md', ''))}</div>
-      <div class="date">${new Date(n.mtime).toLocaleString()}</div>
+      <div class="date">${esc(n.rel ? n.rel.replace(/\\/g, '/').replace(/\/?[^/]+$/, '') || '/' : '')} · ${new Date(n.mtime).toLocaleDateString()}</div>
     </div>`).join('');
   $$('[data-note]').forEach(el => el.addEventListener('click', async () => {
     state.activeNote = el.dataset.note;
@@ -296,6 +379,11 @@ async function loadMemory() {
   }));
 }
 $('#btn-open-vault').addEventListener('click', () => window.aura.memory.openVault());
+
+const _logsOpen = $('#btn-open-logs');
+if (_logsOpen) _logsOpen.addEventListener('click', () => window.aura.logs && window.aura.logs.open());
+const _logsDir = $('#btn-open-logs-dir');
+if (_logsDir) _logsDir.addEventListener('click', () => window.aura.logs && window.aura.logs.openDir());
 
 /* ---------- settings ---------- */
 
@@ -346,8 +434,8 @@ async function loadSettings() {
   })();
   // Папка базы знаний
   $('#set-knowledge').value = state.settings.knowledgePath || '';
-  // AI Free
-  $('#set-aifree').checked = !!state.settings.useAIFree;
+  $('#set-soul').value = state.settings.soulPath || '';
+  $('#set-openrouter').value = state.settings.openrouterKey || '';
   $('#set-tg-enabled').checked = !!state.settings.telegramEnabled;
   $('#set-tg-token').value = state.settings.telegramToken || '';
   $('#set-tg-allowed').value = state.settings.telegramAllowed || '';
@@ -374,24 +462,139 @@ window.aura.telegram.onStatus(renderTgStatus);
 
 $('#btn-open-vault').addEventListener('click', () => window.aura.memory.openVault());
 $('#btn-open-graph').addEventListener('click', async function () {
-  const panel = $('#hermes-mcp'); // reuse MCP panel? No, create a graph modal
-  const html = await window.aura.memory.getGraphHTML();
-  // Открываем модальное окно с iframe
   const existing = document.getElementById('graph-modal');
   if (existing) existing.remove();
+  const data = await window.aura.memory.getGraph();
+
   const modal = document.createElement('div');
   modal.id = 'graph-modal';
-  modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;background:#0b0f17;display:flex;flex-direction:column';
+  const n = (data && data.nodes) ? data.nodes.length : 0;
+  const e = (data && data.links) ? data.links.length : 0;
   modal.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:#0f172a;border-bottom:1px solid #1e293b">
-      <span style="color:#e2e8f0;font-weight:600">◎ Граф знаний</span>
-      <button id="graph-close" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer">✕</button>
-    </div>
-    <iframe id="graph-frame" style="flex:1;border:none" sandbox="allow-scripts"></iframe>`;
+    <div class="graph-head">
+      <div><span class="gtitle">◎ Граф знаний</span><span class="gmeta">${n} заметок · ${e} связей</span></div>
+      <button id="graph-close" class="btn ghost">✕</button>
+    </div>` + (n === 0
+      ? `<div class="graph-empty">Нет заметок с [[связями]] в базе. Добавьте wiki-ссылки между файлами.</div>`
+      : `<canvas id="graph-canvas"></canvas>`);
   document.body.appendChild(modal);
-  document.getElementById('graph-frame').srcdoc = html;
-  document.getElementById('graph-close').addEventListener('click', () => modal.remove());
+  document.getElementById('graph-close').addEventListener('click', () => { if (window._graphStop) window._graphStop(); modal.remove(); });
+  if (n > 0) renderGraphCanvas(data, document.getElementById('graph-canvas'));
 });
+
+/**
+ * Рисует граф знаний на canvas без внешних зависимостей.
+ * Простая силовая раскладка (отталкивание + пружины + центрирование),
+ * затем статичный рендер с панорамой (drag) и зумом (колесо).
+ */
+function renderGraphCanvas(data, canvas) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const palette = ['#6c8cff','#9d6cff','#38d39f','#f5b34d','#f06a6a','#ec4899','#06b6d4','#84cc16'];
+  const groupColor = {};
+  let ci = 0;
+
+  // Ограничиваем число узлов для производительности: оставляем самые связанные.
+  const deg = {};
+  for (const l of data.links) { deg[l.source] = (deg[l.source]||0)+1; deg[l.target] = (deg[l.target]||0)+1; }
+  let nodes = data.nodes.slice();
+  const CAP = 600;
+  if (nodes.length > CAP) {
+    nodes = nodes.sort((a,b) => (deg[b.id]||0)-(deg[a.id]||0)).slice(0, CAP);
+  }
+  const keep = new Set(nodes.map(nn => nn.id));
+  const links = data.links.filter(l => keep.has(l.source) && keep.has(l.target));
+
+  const idx = {};
+  nodes.forEach((nd, i) => {
+    idx[nd.id] = i;
+    nd.x = Math.cos(i) * 200 + (Math.random()-0.5)*60;
+    nd.y = Math.sin(i) * 200 + (Math.random()-0.5)*60;
+    nd.vx = 0; nd.vy = 0;
+    if (!groupColor[nd.group]) groupColor[nd.group] = palette[ci++ % palette.length];
+    nd.deg = deg[nd.id] || 0;
+  });
+  const edges = links.map(l => ({ s: idx[l.source], t: idx[l.target] }));
+
+  // Силовая раскладка — фиксированное число итераций (без вечной анимации).
+  const ITER = nodes.length > 300 ? 120 : 250;
+  const k = 90; // желаемая длина ребра
+  for (let it = 0; it < ITER; it++) {
+    // отталкивание (O(n^2), но n<=600)
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i+1; j < nodes.length; j++) {
+        let dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+        let d2 = dx*dx + dy*dy || 0.01;
+        const f = (k*k) / d2;
+        const d = Math.sqrt(d2);
+        const fx = (dx/d)*f, fy = (dy/d)*f;
+        nodes[i].vx += fx; nodes[i].vy += fy;
+        nodes[j].vx -= fx; nodes[j].vy -= fy;
+      }
+    }
+    // пружины
+    for (const ed of edges) {
+      const a = nodes[ed.s], b = nodes[ed.t];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx*dx+dy*dy) || 0.01;
+      const f = (d - k) * 0.05;
+      const fx = (dx/d)*f, fy = (dy/d)*f;
+      a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+    }
+    // центрирование + интеграция
+    const cool = 1 - it/ITER;
+    for (const nd of nodes) {
+      nd.vx += -nd.x * 0.002; nd.vy += -nd.y * 0.002;
+      nd.x += Math.max(-20, Math.min(20, nd.vx)) * cool;
+      nd.y += Math.max(-20, Math.min(20, nd.vy)) * cool;
+      nd.vx *= 0.85; nd.vy *= 0.85;
+    }
+  }
+
+  let scale = 1, ox = 0, oy = 0;
+  function resize() {
+    canvas.width = canvas.clientWidth * dpr;
+    canvas.height = canvas.clientHeight * dpr;
+    draw();
+  }
+  function draw() {
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);
+    const cx = canvas.clientWidth/2 + ox, cy = canvas.clientHeight/2 + oy;
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(scale, scale);
+    // рёбра
+    ctx.strokeStyle = 'rgba(108,140,255,0.18)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const ed of edges) { ctx.moveTo(nodes[ed.s].x, nodes[ed.s].y); ctx.lineTo(nodes[ed.t].x, nodes[ed.t].y); }
+    ctx.stroke();
+    // узлы
+    for (const nd of nodes) {
+      const r = 3 + Math.min(9, nd.deg);
+      ctx.beginPath();
+      ctx.fillStyle = groupColor[nd.group] || '#64748b';
+      ctx.arc(nd.x, nd.y, r, 0, Math.PI*2); ctx.fill();
+    }
+    // подписи — только для заметных узлов и при достаточном зуме
+    if (scale > 0.7) {
+      ctx.fillStyle = '#cdd6e6'; ctx.font = '11px Segoe UI, sans-serif';
+      for (const nd of nodes) {
+        if (nd.deg >= 2 || scale > 1.4) ctx.fillText(nd.title, nd.x + 6, nd.y + 3);
+      }
+    }
+    ctx.restore();
+  }
+
+  // взаимодействие
+  let drag = false, lx = 0, ly = 0;
+  canvas.addEventListener('mousedown', (ev) => { drag = true; lx = ev.clientX; ly = ev.clientY; });
+  window.addEventListener('mouseup', () => { drag = false; });
+  canvas.addEventListener('mousemove', (ev) => { if (!drag) return; ox += ev.clientX-lx; oy += ev.clientY-ly; lx = ev.clientX; ly = ev.clientY; draw(); });
+  canvas.addEventListener('wheel', (ev) => { ev.preventDefault(); const f = ev.deltaY < 0 ? 1.1 : 0.9; scale = Math.max(0.15, Math.min(4, scale*f)); draw(); }, { passive: false });
+  window.addEventListener('resize', resize);
+  window._graphStop = () => window.removeEventListener('resize', resize);
+  resize();
+}
 
 $('#pick-vault').addEventListener('click', async () => {
   const p = await window.aura.settings.pickFolder('Obsidian vault');
@@ -405,17 +608,22 @@ $('#pick-workspace').addEventListener('click', async () => {
   const p = await window.aura.settings.pickFolder('Workspace');
   if (p) $('#set-workspace').value = p;
 });
+$('#pick-soul').addEventListener('click', async () => {
+  const p = await window.aura.settings.pickFile('Выбери SOUL/.md файл');
+  if (p) $('#set-soul').value = p;
+});
 $('#btn-save-settings').addEventListener('click', async () => {
   const patch = {
     vaultPath: $('#set-vault').value,
     knowledgePath: $('#set-knowledge').value,
     workspace: $('#set-workspace').value,
+    soulPath: $('#set-soul').value,
+    openrouterKey: $('#set-openrouter').value.trim(),
     maxParallel: parseInt($('#set-parallel').value, 10) || 3,
     maxFixRounds: parseInt($('#set-fix').value, 10) || 0,
     reviewEnabled: $('#set-review').checked,
     orchestratorMode: $('#set-engine').value,
     useHermesEngine: false,
-    useAIFree: $('#set-aifree').checked,
     telegramEnabled: $('#set-tg-enabled').checked,
     telegramToken: $('#set-tg-token').value.trim(),
     telegramAllowed: $('#set-tg-allowed').value.trim(),
@@ -428,21 +636,6 @@ $('#btn-save-settings').addEventListener('click', async () => {
   renderTasks();
   $('#settings-saved').textContent = t('saved');
   setTimeout(() => { $('#settings-saved').textContent = ''; }, 2000);
-});
-
-// AI Free: toggle провайдера при переключении
-$('#set-aifree').addEventListener('change', async function() {
-  await window.aura.aifreeToggle({ enabled: this.checked });
-  const ping = await window.aura.aifreePing();
-  if (this.checked && !ping.ok) {
-    alert('AI Free API не отвечает на localhost:4318.\nЗапустите npm run api в папке ai-free.');
-  }
-});
-
-// Ссылка на репозиторий AI Free
-$('#aifree-link').addEventListener('click', (e) => {
-  e.preventDefault();
-  window.aura.shellOpenExternal('https://github.com/Staks-sor/ai-free');
 });
 
 /* ---------- Hermes engine panel ---------- */
@@ -761,11 +954,49 @@ async function loadProStatus() {
 }
 
 /* ---------- init ---------- */
+/* ---------- Boot splash ---------- */
+(function boot() {
+  const overlay = document.getElementById('boot-overlay');
+  if (!overlay) return;
+  const fill = document.getElementById('boot-bar-fill');
+  const status = document.getElementById('boot-status');
+  const hint = document.getElementById('boot-hint');
+  let hidden = false;
+  function apply(s) {
+    if (!s) return;
+    if (typeof s.pct === 'number' && fill) fill.style.width = Math.max(5, s.pct) + '%';
+    if (s.text && status) status.textContent = s.text;
+    if (s.done) hide();
+  }
+  function hide() {
+    if (hidden) return; hidden = true;
+    overlay.classList.add('hide');
+    setTimeout(() => overlay.remove(), 400);
+    // подхватить агентов/движки, ставшие доступными после настройки
+    loadAgents().catch(() => {});
+    loadSettings().catch(() => {});
+  }
+  // catch-up: состояние могло прийти до подписки
+  if (window.aura.setup) {
+    window.aura.setup.status().then(apply).catch(() => {});
+    window.aura.setup.onProgress(apply);
+    window.aura.setup.onDone(hide);
+  } else { hide(); }
+  // страховка: не держать сплэш дольше 90 c, даже если событие потеряно
+  setTimeout(hide, 90000);
+})();
+
 (async function init() {
   await loadSettings();
   // Актуальная версия в sidebar
   if (state.settings.version) $('#sidebar-version').textContent = 'v' + state.settings.version;
   await loadAgents();
   state.tasks = await window.aura.task.list();
+  // Восстанавливаем логи сохранённых задач, чтобы история открывалась с выводом.
+  try {
+    const ids = state.tasks.map(t => t.id);
+    const logs = await window.aura.task.logs(ids);
+    if (logs) Object.assign(state.logs, logs);
+  } catch (_) {}
   renderTasks();
 })();

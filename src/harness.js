@@ -21,6 +21,8 @@
  */
 const path = require('path');
 const fs = require('fs');
+const { guardCommand } = require('./hooks');
+const { buildGraph, codeContext, seedsFromText } = require('./codegraph');
 
 let hseq = 0;
 const nid = (p) => p + '-' + (++hseq) + '-' + Date.now().toString(36);
@@ -33,6 +35,50 @@ const CORE_PATTERNS = ['single', 'loop-until-done', 'fan-out-synthesize'];
 
 /** Маркер завершения, который агент печатает, когда вся цель достигнута. */
 const DONE_SENTINEL = 'AURA_LOOP_DONE';
+
+// ---------- Подбор агента под задачу (общий для Harness и Loop) ----------
+// В режиме «авто» нельзя брать первого по списку — нужен наиболее подходящий по
+// навыкам (напр. задача с веб-поиском → агент со skill 'web-search':
+// gemini/claude/hermes/kimi, а не opencode). Целевые юзеры опытные, у них стоит
+// несколько топ-агентов, поэтому выбор должен учитывать суть задачи.
+function taskNeeds(input) {
+  const s = String(input || '').toLowerCase();
+  const has = (...w) => w.some(x => s.includes(x));
+  const needs = new Set();
+  if (has('найди', 'поиск', 'погугли', 'в интернет', 'в сети', 'онлайн', 'актуальн', 'свеж',
+          'новост', 'цен', 'стоимост', 'расписан', 'сайт', 'research', 'ресёрч', 'источник', 'сверь'))
+    needs.add('web-search');
+  if (has('код', 'лендинг', 'сайт', 'страниц', 'компонент', 'приложени', 'скрипт', 'свёрст',
+          'сверст', 'реализуй', 'функци', 'баг', 'рефактор', 'html', 'css', 'api'))
+    needs.add('coding');
+  if (has('текст', 'статья', 'статью', 'сценар', 'пост', 'письмо', 'опиши', 'перепиши'))
+    needs.add('writing');
+  if (has('проанализир', 'анализ', 'разбер', 'оцен', 'исследуй', 'рассужд'))
+    { needs.add('analysis'); needs.add('reasoning'); }
+  return needs;
+}
+
+function scoreAgent(agent, needs, role) {
+  const skills = agent.skills || [];
+  const roles = agent.roles || [];
+  let score = 0;
+  for (const n of needs) if (skills.includes(n)) score += 10;
+  if (needs.has('web-search') && skills.includes('web-search')) score += 12; // критичный матч
+  if (role && roles.includes(role)) score += 3;
+  if (agent.keyless === false) score += 2;          // агент с ключом обычно мощнее free
+  score += Math.min(skills.length, 8) * 0.25;       // лёгкий бонус за многонавыковость
+  return score;
+}
+
+/** Отсортировать доступных агентов по пригодности под задачу (стабильно). */
+function rankAgents(available, input, role) {
+  const needs = taskNeeds(input);
+  if (!needs.size) return available;                // нет явных потребностей — порядок как был
+  return available
+    .map((a, i) => ({ a, i, s: scoreAgent(a, needs, role) }))
+    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .map(o => o.a);
+}
 
 // ============================================================
 //  DYNAMIC HARNESS — авто-подбор паттерна под задачу
@@ -47,6 +93,66 @@ class HarnessEngine {
     this.getPro = getPro || (() => null);
     this.tasks = new Map();
     this._running = new Map();
+    this._clarifyResolvers = new Map();   // taskId -> resolver ожидания ответов пользователя
+  }
+
+  /**
+   * Пре-флайт уточнение. «уточнить» в результате агент игнорирует, поэтому
+   * перед сборкой агент сам находит реально неоднозначные решения, а AURA задаёт
+   * пользователю ПРЯМОЙ вопрос с вариантами и рекомендацией (как AskUserQuestion).
+   * Ответы вшиваются в задачу — никаких «уточнить» в итоге.
+   * Возвращает строку с ответами (или '' если вопросов нет / отключено).
+   */
+  async _askClarify(task, agent, cwd, plan) {
+    if (this.store.get('clarifyEnabled', true) === false) return '';
+    const prompt = [
+      'Прежде чем выполнять задачу ниже, определи до 3 ПО-НАСТОЯЩЕМУ неоднозначных решений,',
+      'которые существенно влияют на результат и которые стоит уточнить у пользователя',
+      '(например: недостающие факты, выбор формата/стиля, что считать источником истины).',
+      'НЕ выдумывай данные и НЕ задавай вопросы ради галочки. Если всё однозначно — верни [].',
+      'Ответь ТОЛЬКО валидным JSON-массивом, без markdown и пояснений. Формат элемента:',
+      '{"question":"...","options":["вариант1","вариант2"],"recommended":"вариант1"}',
+      '',
+      'ЗАДАЧА:',
+      '"""' + task.input + '"""'
+    ].join('\n');
+    let out = '';
+    try {
+      const res = await this.agents.run(agent.id, prompt, {
+        cwd, runId: task.id + ':clarify', model: this._modelFor(agent, 'standard')
+      });
+      out = res.output || '';
+    } catch (_) { return ''; }
+    let questions = [];
+    try {
+      const m = out.match(/\[[\s\S]*\]/);
+      if (m) questions = JSON.parse(m[0]);
+    } catch (_) { return ''; }
+    questions = (Array.isArray(questions) ? questions : [])
+      .filter(q => q && q.question && Array.isArray(q.options) && q.options.length)
+      .slice(0, 3);
+    if (!questions.length) return '';
+
+    // Спрашиваем пользователя и ждём ответ (с таймаутом → дефолт = recommended).
+    this.emit({ type: 'clarify', taskId: task.id, questions });
+    this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: `[AURA] Нужно уточнить ${questions.length} момент(а) — жду ответа в окне.\n` });
+    const answers = await new Promise(resolve => {
+      const timer = setTimeout(() => {
+        this._clarifyResolvers.delete(task.id);
+        resolve(questions.map(q => ({ question: q.question, answer: q.recommended || q.options[0] })));
+      }, 5 * 60 * 1000);
+      this._clarifyResolvers.set(task.id, (ans) => { clearTimeout(timer); resolve(ans); });
+    });
+    if (!answers || !answers.length) return '';
+    return 'Уточнения от пользователя (используй их, не выдумывай иное):\n' +
+      answers.map(a => `- ${a.question} → ${a.answer}`).join('\n');
+  }
+
+  /** Принять ответы пользователя на уточняющие вопросы (из UI). */
+  resolveClarify(taskId, answers) {
+    const r = this._clarifyResolvers.get(taskId);
+    if (r) { this._clarifyResolvers.delete(taskId); r(answers || []); return true; }
+    return false;
   }
 
   workspaceDir() {
@@ -74,10 +180,15 @@ class HarnessEngine {
     // эвристики ядра
     const fanWords = ['все ', 'каждый', 'весь проект', 'по всем', 'audit', 'аудит', 'просканируй', 'across', 'all files', 'массов'];
     const loopWords = ['пока не', 'до победного', 'итеративно', 'до зелён', 'until', 'повторяй', 'дораб', 'улучшай', 'fix all', 'почини все'];
+    const buildWords = ['создай', 'сделай', 'напиши', 'реализуй', 'сверстай', 'свёрстай', 'построй', 'разработай', 'лендинг', 'сайт', 'страниц', 'компонент', 'приложение', 'скрипт'];
     let pattern = 'single', reason = 'Простая задача — один проход агента.';
     if (loopWords.some(w => s.includes(w)) || /тест|сборк|build|test/.test(s)) {
       pattern = 'loop-until-done';
       reason = 'Цель проверяема и требует итераций — Ralph loop до готовности.';
+    } else if (buildWords.some(w => s.includes(w))) {
+      // Конкретная сборка/создание — один проход исполнителя, даже если ТЗ длинное.
+      pattern = 'single';
+      reason = 'Конкретная задача на создание — один проход исполнителя.';
     } else if (fanWords.some(w => s.includes(w)) || len > 400) {
       pattern = 'fan-out-synthesize';
       reason = 'Широкая задача по многим объектам — разветвление и синтез.';
@@ -109,6 +220,8 @@ class HarnessEngine {
       available[0];
   }
 
+  // Подбор агента под задачу — см. модульные taskNeeds/scoreAgent/rankAgents выше.
+
   async _available() {
     const availability = await this.agents.detectAll();
     const enabled = this.store.get('enabledAgents', {});
@@ -127,8 +240,14 @@ class HarnessEngine {
 
   _withConstraints(prompt) {
     try {
+      const ws = this.workspaceDir();
+      const wsRule = `[РАБОЧАЯ ДИРЕКТОРИЯ: ${ws}]\n` +
+        `Все файлы создавай и меняй ТОЛЬКО внутри этой директории, используя относительные пути. ` +
+        `Не придумывай другие абсолютные пути и не пиши за её пределами.\n\n---\n\n`;
+      const soul = this.memory.loadSoul ? this.memory.loadSoul() : '';
+      const soulBlock = soul ? `[О ПОЛЬЗОВАТЕЛЕ И ЕГО ПРОЕКТАХ — учитывай это]\n${soul}\n\n---\n\n` : '';
       const c = this.memory.loadConstraints ? this.memory.loadConstraints() : '';
-      return c ? c + '\n\n---\n\n' + prompt : prompt;
+      return wsRule + soulBlock + (c ? c + '\n\n---\n\n' + prompt : prompt);
     } catch (_) { return prompt; }
   }
 
@@ -146,12 +265,38 @@ class HarnessEngine {
     this.emit({ type: 'task-created', task: this.publicTask(task) });
     this.emit({ type: 'log', taskId, agent: 'aura', text: `[AURA] Динамический харнес: паттерн «${plan.pattern}». ${plan.reason}\n` });
 
-    const available = await this._available();
+    // Ранжируем под задачу: в «авто» первым должен быть наиболее подходящий агент,
+    // а не первый по списку (все пути выбора в итоге падают на порядок available).
+    const available = rankAgents(await this._available(), input);
     if (available.length === 0) {
       task.status = 'failed';
       task.summary = 'Нет установленных агентов.';
       this.emit({ type: 'task-updated', task: this.publicTask(task) });
       return taskId;
+    }
+
+    // Пре-флайт уточнение: прямые вопросы пользователю вместо игнорируемого «уточнить».
+    if (!opts.skipClarify) {
+      try {
+        const clar = await this._askClarify(task, available[0], cwd, plan);
+        if (clar) {
+          task.input = input + '\n\n' + clar;
+          this.emit({ type: 'task-updated', task: this.publicTask(task) });
+        }
+      } catch (_) { /* уточнение не должно ронять задачу */ }
+    }
+
+    // Нативный граф кода: если задача про код и в рабочей папке есть проект —
+    // даём агенту карту связей, чтобы читал только релевантное (без файлов в базе).
+    if (this.store.get('codeGraphEnabled', true) !== false && taskNeeds(input).has('coding')) {
+      try {
+        const g = buildGraph(cwd, { maxFiles: 600 });
+        const map = codeContext(g, seedsFromText(g, input));
+        if (map) {
+          task.input += '\n\n[КАРТА КОДА ПРОЕКТА — читай только связанные файлы, экономь контекст]\n' + map;
+          this.emit({ type: 'log', taskId: task.id, agent: 'aura', text: `[AURA] Граф кода: ${g.files.length} файлов, карта связей передана агенту.\n` });
+        }
+      } catch (_) { /* граф — подстраховка, не критичен */ }
     }
 
     try {
@@ -192,7 +337,9 @@ class HarnessEngine {
   }
 
   async _runSingle(task, available, cwd, plan) {
-    const agent = this._coordinator(available);
+    // available уже отранжирован под задачу в start() → берём наиболее подходящего
+    // исполнителя, а не настроенного координатора (тот нужен для планирования).
+    const agent = available[0];
     const model = this._modelFor(agent, plan.complexity);
     const st = { id: 's1', title: 'Выполнение', agent: agent.id, agentName: agent.name, role: 'coder', status: 'running', model, dependsOn: [], output: '' };
     task.subtasks.push(st);
@@ -365,15 +512,18 @@ class LoopRunner {
     return ws;
   }
 
-  async _coordinator() {
+  async _coordinator(input) {
     const availability = await this.agents.detectAll();
     const enabled = this.store.get('enabledAgents', {});
-    const available = this.agents.getAgents().filter(a =>
+    let available = this.agents.getAgents().filter(a =>
       availability[a.id] && availability[a.id].available && enabled[a.id] !== false);
     if (available.length === 0) return null;
     const id = this.store.get('coordinator', '');
-    return available.find(a => a.id === id) ||
-      available.find(a => a.roles && a.roles.includes('coordinator')) || available[0];
+    const configured = available.find(a => a.id === id);
+    if (configured) return configured;               // явный выбор пользователя уважаем
+    // Иначе — наиболее подходящий под задачу (а не первый по списку).
+    available = rankAgents(available, input);
+    return available.find(a => a.roles && a.roles.includes('coordinator')) || available[0];
   }
 
   _modelFor(agent, complexity) {
@@ -386,7 +536,14 @@ class LoopRunner {
   }
 
   _withConstraints(prompt) {
-    try { const c = this.memory.loadConstraints ? this.memory.loadConstraints() : ''; return c ? c + '\n\n---\n\n' + prompt : prompt; }
+    try {
+      const ws = this.workspaceDir();
+      const wsRule = `[РАБОЧАЯ ДИРЕКТОРИЯ: ${ws}]\n` +
+        `Все файлы создавай и меняй ТОЛЬКО внутри этой директории, используя относительные пути. ` +
+        `Не придумывай другие абсолютные пути и не пиши за её пределами.\n\n---\n\n`;
+      const soul = this.memory.loadSoul ? this.memory.loadSoul() : '';
+      const soulBlock = soul ? `[О ПОЛЬЗОВАТЕЛЕ И ЕГО ПРОЕКТАХ — учитывай это]\n${soul}\n\n---\n\n` : '';
+      const c = this.memory.loadConstraints ? this.memory.loadConstraints() : ''; return wsRule + soulBlock + (c ? c + '\n\n---\n\n' + prompt : prompt); }
     catch (_) { return prompt; }
   }
 
@@ -419,7 +576,7 @@ class LoopRunner {
     this.emit({ type: 'task-created', task: this.publicLoop(loop) });
     this.emit({ type: 'log', taskId: id, agent: 'aura', text: `[AURA] Ralph Loop стартовал. Автономия: ${autonomy}${proNote}. Лимит итераций: ${loop.maxIterations}.\n` });
 
-    const agent = await this._coordinator();
+    const agent = await this._coordinator(input);
     if (!agent) {
       loop.status = 'failed'; loop.summary = 'Нет установленных агентов.';
       this.emit({ type: 'task-updated', task: this.publicLoop(loop) });
@@ -526,6 +683,9 @@ class LoopRunner {
 
   _runBackpressure(loop) {
     return new Promise(resolve => {
+      // Хук безопасности: backpressure-команду исполняет сама AURA — страхуем.
+      const g = guardCommand(loop.backpressureCmd);
+      if (g.level === 'block') { resolve('[backpressure заблокирован хуком: ' + g.reason + ']'); return; }
       const isWin = process.platform === 'win32';
       const child = require('child_process').spawn(isWin ? 'cmd.exe' : 'sh',
         [isWin ? '/c' : '-c', loop.backpressureCmd], { cwd: loop.cwd, windowsHide: true, env: { ...process.env, NO_COLOR: '1' } });

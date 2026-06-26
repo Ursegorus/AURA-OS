@@ -24,6 +24,7 @@
  */
 const https = require('https');
 const { spawn } = require('child_process');
+const { guardCommand } = require('./hooks');
 const os = require('os');
 
 const IS_WIN = process.platform === 'win32';
@@ -57,6 +58,7 @@ class TelegramTerminal {
     this.running = false;
     this.offset = 0;
     this._abort = null;             // current getUpdates AbortController
+    this._retryTimer = null;        // авто-переподключение после сетевого сбоя
     this.children = new Map();      // chatId -> running child process
     this.taskChats = new Map();     // orchestrator taskId -> chatId
   }
@@ -93,12 +95,22 @@ class TelegramTerminal {
     this.token = cfg.token;
     this.allowed = new Set(cfg.allowed.map(String));
 
-    let me;
-    try {
-      me = await this.api('getMe', {});
-    } catch (e) {
-      this.status({ state: 'error', error: 'getMe failed: ' + e.message });
-      this.log('Failed to authorise bot: ' + e.message);
+    // getMe с ретраями: связь с api.telegram.org из РФ периодически проседает
+    // (DPI/троттлинг). Один таймаут не должен класть бота навсегда — иначе poll()
+    // не стартует и терминал «висит» до ручного пересохранения настроек.
+    let me, lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try { me = await this.api('getMe', {}, 20000); lastErr = null; break; }
+      catch (e) {
+        lastErr = e;
+        this.log(`getMe попытка ${attempt}/3 неуспешна: ${e.message}`);
+        if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000));
+      }
+    }
+    if (lastErr) {
+      this.status({ state: 'error', error: 'getMe failed: ' + lastErr.message + ' (повтор через 30с)' });
+      this.log('Не удалось авторизовать бота после 3 попыток: ' + lastErr.message);
+      this._scheduleAutoRetry();
       return;
     }
     if (!me || !me.ok) {
@@ -128,8 +140,19 @@ class TelegramTerminal {
     this.poll();
   }
 
+  /** Запланировать одну авто-попытку переподключения (само-восстановление сети). */
+  _scheduleAutoRetry() {
+    if (this._retryTimer) return;
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      const cfg = this.config();
+      if (cfg.enabled && cfg.token) this.restart().catch(() => {});
+    }, 30000);
+  }
+
   async stop() {
     this.running = false;
+    if (this._retryTimer) { clearTimeout(this._retryTimer); this._retryTimer = null; }
     if (this._abort) { try { this._abort.abort(); } catch (_) {} this._abort = null; }
     for (const [, child] of this.children) { try { child.kill(); } catch (_) {} }
     this.children.clear();
@@ -192,6 +215,7 @@ class TelegramTerminal {
           '/pwd — current directory\n' +
           '/cd <path> — change directory\n' +
           '/kill — stop the running command\n' +
+          '/force <cmd> — выполнить опасную команду в обход подтверждения\n' +
           '/aura <task> — run an AURA agent task\n' +
           '/agents — list agents\n' +
           '/id — show this chat ID\n' +
@@ -213,6 +237,10 @@ class TelegramTerminal {
       case '/aura':
         if (!arg) return this.send(chatId, 'Usage: /aura <task description>');
         return this.startAura(chatId, arg);
+      case '/force':
+        // Подтверждённое выполнение команды, которую хук пометил как опасную.
+        if (!arg) return this.send(chatId, 'Usage: /force <команда>');
+        return this.runShell(chatId, arg, { force: true });
       default:
         return this.send(chatId, 'Unknown command. /help for the list.');
     }
@@ -275,9 +303,20 @@ class TelegramTerminal {
 
   // ---------- shell execution ----------
 
-  runShell(chatId, command) {
+  runShell(chatId, command, { force = false } = {}) {
     if (this.children.has(chatId)) {
       return this.send(chatId, '⏳ A command is still running. Use /kill to stop it.');
+    }
+    // Хук безопасности: AURA сама исполняет эту команду, поэтому страхуем ДО запуска.
+    const guard = guardCommand(command);
+    if (guard.level === 'block') {
+      this.log('BLOCKED command from ' + chatId + ': ' + command);
+      return this.send(chatId, '⛔ Заблокировано хуком безопасности: ' + guard.reason + '\nЭта команда не будет выполнена.');
+    }
+    if (guard.level === 'confirm' && !force) {
+      this.log('CONFIRM required from ' + chatId + ': ' + command);
+      return this.send(chatId, '⚠️ Опасная команда: ' + guard.reason +
+        '\nЕсли уверены — повторите так:\n`/force ' + command + '`');
     }
     let shellCmd, shellArgs;
     if (IS_WIN) {

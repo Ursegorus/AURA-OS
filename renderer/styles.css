@@ -476,3 +476,70 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 .pro-head.off { color: var(--muted); }
 .pro-feature { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
 .pro-status-box code { display: inline-block; margin-top: 10px; background: var(--bg2); padding: 8px 12px; border-radius: 8px; color: var(--accent); font-size: 12px; }
+
+/* ---------- Boot splash ---------- */
+#boot-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: radial-gradient(120% 120% at 50% 30%, #131c30 0%, var(--bg) 70%);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .35s ease;
+}
+#boot-overlay.hide { opacity: 0; pointer-events: none; }
+.boot-inner { text-align: center; width: 340px; max-width: 80vw; }
+.boot-logo {
+  width: 64px; height: 64px; margin: 0 auto 18px;
+  border-radius: 18px; background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px; font-weight: 800; color: #fff;
+  box-shadow: 0 8px 30px rgba(108,140,255,.35);
+  animation: bootpulse 1.6s ease-in-out infinite;
+}
+@keyframes bootpulse { 0%,100%{ transform: scale(1); } 50%{ transform: scale(1.06); } }
+.boot-title { font-size: 22px; font-weight: 700; letter-spacing: 1px; margin-bottom: 22px; }
+.boot-bar { height: 6px; background: var(--card); border-radius: 4px; overflow: hidden; }
+#boot-bar-fill {
+  height: 100%; width: 5%; border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  transition: width .4s ease;
+}
+.boot-status { margin-top: 14px; color: var(--text); font-size: 14px; }
+.boot-hint { margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+/* ---------- Graph (canvas, без внешних зависимостей) ---------- */
+#graph-modal {
+  /* Начинаем НИЖЕ кастомного титлбара (38px), иначе шапка графа с кнопкой ✕
+     прячется за тулбаром окна (он выше по z-index) и конфликтует с ним. */
+  position: fixed; top: 38px; left: 0; right: 0; bottom: 0; z-index: 8000;
+  background: rgba(7,10,18,.96);
+  display: flex; flex-direction: column;
+}
+#graph-modal .graph-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--bg2);
+}
+#graph-modal .graph-head .gtitle { font-weight: 600; }
+#graph-modal .graph-head .gmeta { color: var(--muted); font-size: 12px; margin-left: 12px; }
+#graph-canvas { flex: 1; width: 100%; display: block; cursor: grab; }
+#graph-canvas:active { cursor: grabbing; }
+.graph-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+
+/* Титлбар должен оставаться кликабельным поверх сплэша (окно без рамки) */
+.titlebar { position: relative; z-index: 9500; }
+
+/* ---------- Agent requirement line ---------- */
+.agent-req {
+  font-size: 12px; line-height: 1.45; margin: 8px 0 4px;
+  padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border);
+}
+.agent-req.keyless { background: rgba(56,211,159,.08); border-color: rgba(56,211,159,.35); color: #b9f4df; }
+.agent-req.needkey { background: rgba(245,179,77,.07); border-color: rgba(245,179,77,.30); color: #f2d6a6; }
+.agent-req b { color: inherit; }
+.agent-req a.agent-setup-link { color: var(--accent); text-decoration: none; white-space: nowrap; }
+.agent-req a.agent-setup-link:hover { text-decoration: underline; }
+
+/* ---------- Honest warning note ---------- */
+.hint.warn-note {
+  background: rgba(245,179,77,.08); border: 1px solid rgba(245,179,77,.30);
+  color: #f2d6a6; border-radius: 9px; padding: 8px 10px; margin-top: 6px; line-height: 1.45;
+}
+.hint.warn-note b { color: #f7e4bf; }

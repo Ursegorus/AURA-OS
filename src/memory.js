@@ -30,6 +30,36 @@ class Memory {
 
   vaultPath() { return this.basePath(); }
 
+  /**
+   * SOUL — кто пользователь и над чем работает. Гибкий резолв, чтобы работало
+   * у всех: у кого нет базы, у кого в базе нет инфы о себе, у кого она отдельно.
+   * Приоритет: 1) явный soulPath (любой .md); 2) <vault>/_BRAIN/CONTEXT.md (+PROJECTS.md);
+   * 3) <base>/SOUL.md; 4) <base>/AURA/SOUL.md. Нет ничего → '' (работаем без SOUL).
+   */
+  loadSoul(maxChars = 4000) {
+    const read = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch (_) { return ''; } };
+    // 1) Явный путь из настроек
+    const explicit = this.store.get('soulPath', '');
+    if (explicit && fs.existsSync(explicit)) {
+      const t = read(explicit);
+      if (t.trim()) return t.slice(0, maxChars);
+    }
+    // 2) Smart Brain: _BRAIN/CONTEXT.md (+ PROJECTS.md если влезает)
+    const base = this.basePath();
+    const ctx = path.join(base, '_BRAIN', 'CONTEXT.md');
+    if (fs.existsSync(ctx)) {
+      let t = read(ctx);
+      const proj = path.join(base, '_BRAIN', 'PROJECTS.md');
+      if (fs.existsSync(proj) && t.length < maxChars - 500) t += '\n\n' + read(proj);
+      if (t.trim()) return t.slice(0, maxChars);
+    }
+    // 3-4) SOUL.md в базе или в папке AURA
+    for (const p of [path.join(base, 'SOUL.md'), path.join(base, 'AURA', 'SOUL.md')]) {
+      if (fs.existsSync(p)) { const t = read(p); if (t.trim()) return t.slice(0, maxChars); }
+    }
+    return '';
+  }
+
   /** Папка AURA внутри базы. */
   auraDir() {
     const dir = path.join(this.basePath(), 'AURA');
@@ -89,13 +119,27 @@ class Memory {
     return lines.slice(-15).join('\n').slice(-maxChars);
   }
 
-  listNotes() {
-    const dir = this.auraDir();
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir)
-      .filter(f => f.endsWith('.md'))
-      .map(f => ({ name: f, path: path.join(dir, f), mtime: fs.statSync(path.join(dir, f)).mtimeMs, size: fs.statSync(path.join(dir, f)).size }))
-      .sort((a, b) => b.mtime - a.mtime);
+  /** Список заметок ВСЕГО vault (не только папки AURA), свежие сверху.
+   *  Раньше читалась только подпапка AURA — поэтому «Память» не видела
+   *  существующую базу. Тяжёлые папки (node_modules/raw/wiki/state) пропускаем. */
+  listNotes(limit = 800) {
+    const base = this.basePath();
+    if (!fs.existsSync(base)) return [];
+    const files = this._findAllMd(base);
+    const out = [];
+    for (const full of files) {
+      try {
+        const st = fs.statSync(full);
+        out.push({
+          name: path.basename(full),
+          rel: path.relative(base, full),
+          path: full,
+          mtime: st.mtimeMs,
+          size: st.size
+        });
+      } catch (_) {}
+    }
+    return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit);
   }
 
   readNote(p) {
@@ -279,47 +323,69 @@ class Memory {
   buildGraph() {
     try {
       const base = this.basePath();
-      // Собираем все .md файлы
       const allMd = this._findAllMd(base);
       const nodes = [];
       const links = [];
       const nodeSet = new Set();
+      // Карта имя-заметки(lowercase) → id(rel). Нужна, чтобы [[Заметка]]
+      // резолвилось по ИМЕНИ файла в любой папке (семантика Obsidian),
+      // а не только по пути от корня. Иначе граф почти пустой на реальной базе.
+      const byBasename = new Map();
 
       for (const filepath of allMd) {
         const rel = path.relative(base, filepath).replace(/\.md$/i, '');
         const name = path.basename(filepath).replace(/\.md$/i, '');
         if (!nodeSet.has(rel)) {
-          nodes.push({ id: rel, title: name, group: path.dirname(rel).split(path.sep)[0] || 'root' });
+          nodes.push({ id: rel, title: name, group: rel.split(path.sep)[0] || 'root' });
           nodeSet.add(rel);
         }
+        const key = name.toLowerCase();
+        if (!byBasename.has(key)) byBasename.set(key, rel);
+      }
 
-        // Ищем [[wikilinks]] в содержимом
+      // Резолв одной wiki-ссылки в id существующего узла (или null).
+      const resolve = (target) => {
+        const t = target.replace(/\.md$/i, '');
+        if (nodeSet.has(t)) return t;                         // точный путь от корня
+        const byName = byBasename.get(path.basename(t).toLowerCase());
+        if (byName) return byName;                            // по имени заметки (Obsidian)
+        const byNameFull = byBasename.get(t.toLowerCase());
+        return byNameFull || null;
+      };
+
+      const seen = new Set();
+      for (const filepath of allMd) {
+        const rel = path.relative(base, filepath).replace(/\.md$/i, '');
         try {
           const content = fs.readFileSync(filepath, 'utf8');
           const wls = content.match(/\[\[([^\]]+)\]\]/g) || [];
           for (const wl of wls) {
-            const target = wl.slice(2, -2).split('|')[0].trim();
-            // Проверяем, существует ли такой файл (как .md или как папка/файл.md)
-            const targetPath = this._resolveWikilink(base, target);
-            if (targetPath && nodeSet.has(target)) {
-              links.push({ source: rel, target, value: 1 });
-            } else if (targetPath) {
-              // Добавляем target как узел, даже если файла пока нет
-              if (!nodeSet.has(target)) {
-                nodes.push({ id: target, title: target, group: 'unlinked' });
-                nodeSet.add(target);
-              }
-              links.push({ source: rel, target, value: 1 });
-            }
+            const target = wl.slice(2, -2).split('|')[0].split('#')[0].trim();
+            if (!target) continue;
+            const tid = resolve(target);
+            if (!tid || tid === rel) continue;
+            const k = rel + '→' + tid;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            links.push({ source: rel, target: tid, value: 1 });
           }
         } catch (_) {}
       }
 
-      // Сохраняем graph.json
       const stateDir = path.join(base, 'AURA', 'state');
       if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
       fs.writeFileSync(path.join(stateDir, 'graph.json'), JSON.stringify({ nodes, links }, null, 2), 'utf8');
     } catch (_) { /* graph не критичен */ }
+  }
+
+  /** Данные графа {nodes, links} для рисования в renderer (canvas, без CDN). */
+  getGraphData() {
+    this.buildGraph();
+    const graphPath = path.join(this.auraDir(), 'state', 'graph.json');
+    try {
+      const g = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
+      return { nodes: g.nodes || [], links: g.links || [] };
+    } catch (_) { return { nodes: [], links: [] }; }
   }
 
   /** Сгенерировать HTML с vis-network графом. */

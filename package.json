@@ -1,7 +1,7 @@
 {
   "name": "aura-os",
   "productName": "AURA OS",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "AURA OS — Agentic Unified Runtime Architecture. A desktop harness-orchestrator for AI agents (Claude Code, Codex, Gemini, Hermes, local LLMs): dynamic harness, Ralph loops, Obsidian shared memory and a built-in Telegram remote terminal.",
   "main": "main.js",
   "author": "AURA OS",
@@ -16,7 +16,7 @@
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:linux": "electron-builder --linux --publish never",
-    "check": "node --check main.js && node --check preload.js && node --check src/harness.js && node --check src/orchestrator.js && node --check src/agents.js && node --check src/memory.js && node --check src/telegram.js && node --check renderer/app.js && node --check renderer/i18n.js",
+    "check": "node --check main.js && node --check preload.js && node --check src/logger.js && node --check src/harness.js && node --check src/orchestrator.js && node --check src/agents.js && node --check src/memory.js && node --check src/telegram.js && node --check src/taskstore.js && node --check src/hooks.js && node --check src/codegraph.js && node --check renderer/app.js && node --check renderer/i18n.js",
     "pack": "electron-builder --dir"
   },
   "devDependencies": {

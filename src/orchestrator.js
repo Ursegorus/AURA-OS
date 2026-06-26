@@ -366,6 +366,14 @@ class HermesEngine {
     };
   }
 
+  /** Аргументы профиля Hermes. Пусто = дефолтный профиль (всегда существует).
+   *  Раньше жёстко стоял `-p aura-os`, которого у пользователя нет → краш
+   *  «Profile aura-os does not exist». Теперь профиль опционален (настройка). */
+  _profileArgs() {
+    const prof = this.store.get('hermesProfile', '');
+    return prof ? ['-p', prof] : [];
+  }
+
   workspaceDir() {
     let ws = this.settings().workspace;
     if (!ws) {
@@ -411,7 +419,7 @@ class HermesEngine {
 
     const hermesPath = 'hermes';
     const args = [
-      '-p', 'aura-os',
+      ...this._profileArgs(),
       'chat', '-q', prompt,
       '--skills', 'aura-os-orchestrator,claude-code,codex,opencode',
       '--yolo', '-Q'
@@ -518,7 +526,7 @@ class HermesEngine {
       notePath ? `Заметка Obsidian: ${notePath}` : ''
     ].filter(Boolean).join('\n');
 
-    const fullArgs = ['-p', 'aura-os', 'chat', '-q',
+    const fullArgs = [...this._profileArgs(), 'chat', '-q',
       `Сохрани в память: ${prompt}`,
       '--yolo', '-Q'
     ];
@@ -578,7 +586,9 @@ class OpenCodeEngine {
   settings() {
     return {
       workspace: this.store.get('workspace', ''),
-      maxParallel: this.store.get('maxParallel', 3)
+      maxParallel: this.store.get('maxParallel', 3),
+      // Бесплатная модель OpenCode по умолчанию — работает без ключей.
+      model: this.store.get('opencodeModel', 'opencode/deepseek-v4-flash-free')
     };
   }
 
@@ -615,7 +625,10 @@ class OpenCodeEngine {
       'Пиши на русском.'
     ].join('\n');
 
-    const args = ['run', prompt];
+    // Явно указываем бесплатную модель (-m) и авто-подтверждение действий,
+    // иначе opencode берёт дефолтную модель, требующую входа, и падает keyless.
+    const model = this.settings().model;
+    const args = ['run', '-m', model, '--dangerously-skip-permissions', prompt];
     const escaped = args.map(a => {
       const s = String(a);
       return /[ "']/.test(s) ? '"' + s.replace(/"/g, '\\"') + '"' : s;
@@ -821,6 +834,7 @@ class Orchestrator {
   // ---------- Dynamic Harness ----------
   planHarness(input) { return this._harness.plan(input); }
   startHarness(input, opts) { return this._harness.start(input, opts); }
+  resolveClarify(taskId, answers) { return this._harness.resolveClarify(taskId, answers); }
 
   // ---------- Ralph Loop ----------
   startLoop(input, opts) { return this._loops.start(input, opts); }
@@ -831,43 +845,48 @@ class Orchestrator {
 
   _engine() {
     const mode = this.store.get('orchestratorMode', 'auto');
-    if (mode === 'legacy') return this._legacy;
-    if (mode === 'hermes') {
-      // Проверяем, установлен ли Hermes
-      const hermesOk = this.store.get('_hermesAvailable', false);
-      if (!hermesOk) {
-        const opencodeOk = this.store.get('_opencodeAvailable', false);
-        return opencodeOk ? this._opencode : this._legacy;
-      }
-      return this._hermes;
-    }
-    if (mode === 'opencode') {
-      const opencodeOk = this.store.get('_opencodeAvailable', false);
-      return opencodeOk ? this._opencode : this._legacy;
-    }
-    // auto: hermes > opencode > legacy
     const hermesOk = this.store.get('_hermesAvailable', false);
-    if (hermesOk) return this._hermes;
     const opencodeOk = this.store.get('_opencodeAvailable', false);
-    return opencodeOk ? this._opencode : this._legacy;
+    const claudeOk = this.store.get('_claudeAvailable', false);
+
+    // Явный выбор движка пользователем — уважаем строго.
+    if (mode === 'legacy') return this._legacy;
+    if (mode === 'claude') return this._claude;            // был баг: claude проваливался в hermes
+    if (mode === 'hermes')  return hermesOk ? this._hermes : (opencodeOk ? this._opencode : this._legacy);
+    if (mode === 'opencode') return opencodeOk ? this._opencode : this._legacy;
+
+    // auto: предпочитаем то, что работает без отдельной платной подписки/ключа
+    // и не требует «танцев с бубнами». Claude (если есть подписка) → OpenCode
+    // (бесплатные модели) → Hermes (опционально) → классический мультиагент.
+    if (claudeOk) return this._claude;
+    if (opencodeOk) return this._opencode;
+    if (hermesOk) return this._hermes;
+    return this._legacy;
   }
 
   /** Вызывается при старте — проверяет доступные движки. */
   async detectEngines() {
-    const { execFile } = require('child_process');
-    const check = (cmd) => new Promise(resolve => {
+    // С таймаутом: некоторые CLI (напр. hermes) на `--version` висят 10+ c —
+    // без ограничения это застопорит сплэш-экран на этапе «Определяю движки».
+    const check = (cmd, timeoutMs = 6000) => new Promise(resolve => {
+      let done = false;
+      const finish = (v) => { if (!done) { done = true; resolve(v); } };
       const c = require('child_process').spawn(process.platform === 'win32' ? 'cmd.exe' : 'sh',
         [process.platform === 'win32' ? '/c' : '-c', cmd + ' --version 2>&1'], { windowsHide: true });
+      const timer = setTimeout(() => { try { c.kill(); } catch (_) {} finish(false); }, timeoutMs);
       let out = '';
       c.stdout.on('data', d => out += d);
       c.stderr.on('data', d => out += d);
-      c.on('close', code => resolve(code === 0));
+      c.on('error', () => { clearTimeout(timer); finish(false); });
+      c.on('close', code => { clearTimeout(timer); finish(code === 0); });
     });
     const hermes = await check('hermes');
     const opencode = await check('opencode');
+    const claude = await check('claude');
     this.store.set('_hermesAvailable', hermes);
     this.store.set('_opencodeAvailable', opencode);
-    return { hermes, opencode };
+    this.store.set('_claudeAvailable', claude);
+    return { hermes, opencode, claude };
   }
 
   startTask(input) { return this._engine().startTask(input); }
