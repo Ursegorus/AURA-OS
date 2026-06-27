@@ -43,7 +43,7 @@ AURA OS ищет релевантный контекст в вашей базе 
 - **OpenRouter** — один ключ на множество моделей с оплатой криптой; «мозг» для плана/ресёрча/критики (переиспользует ключ из env/Hermes, если он уже есть)
 - **Карта кода** — нативный граф зависимостей проекта: агент читает только связанные файлы (экономия токенов), без единого лишнего файла в базе
 
-> **Модель — commodity, harness — moat.** Ценность не в модели (она у всех одна), а в обвязке вокруг неё. AURA даёт moat-слой поверх ваших BYO-моделей. **AURA Pro** добавляет умную маршрутизацию моделей, полный набор из 6 паттернов и Self-Improving Loop — см. [docs/HARNESS.ru.md](docs/HARNESS.ru.md).
+> **Модель — commodity, harness — moat.** Ценность не в модели (она у всех одна), а в обвязке вокруг неё. AURA даёт moat-слой поверх ваших BYO-моделей: умную маршрутизацию моделей, набор из 6 паттернов оркестрации и Self-Improving Loop — см. [docs/HARNESS.ru.md](docs/HARNESS.ru.md).
 
 ---
 
@@ -145,7 +145,7 @@ No fiddling with Python, Node.js or the terminal — AURA installs what's missin
 - **OpenRouter** — one key for many models with crypto payment; a "brain" for planning/research/critique (reuses an existing key from env/Hermes if present)
 - **Code map** — a native project dependency graph: the agent reads only related files (token savings), without writing a single extra file to your base
 
-> **The model is commodity, the harness is the moat.** The value isn't the model (everyone has the same one), it's the harness around it. AURA gives you a moat layer over your BYO models. **AURA Pro** adds smart model routing, the full set of 6 patterns and a Self-Improving Loop — see [docs/HARNESS.ru.md](docs/HARNESS.ru.md).
+> **The model is commodity, the harness is the moat.** The value isn't the model (everyone has the same one), it's the harness around it. AURA gives you a moat layer over your BYO models: smart model routing, a set of 6 orchestration patterns and a Self-Improving Loop — see [docs/HARNESS.ru.md](docs/HARNESS.ru.md).
 
 ### Quick start
 

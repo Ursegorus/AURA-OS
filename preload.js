@@ -39,9 +39,6 @@ contextBridge.exposeInMainWorld('aura', {
     add: (rule) => ipcRenderer.invoke('constraints:add', rule),
     open: () => ipcRenderer.invoke('constraints:open')
   },
-  pro: {
-    status: () => ipcRenderer.invoke('pro:status')
-  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch) => ipcRenderer.invoke('settings:set', patch),

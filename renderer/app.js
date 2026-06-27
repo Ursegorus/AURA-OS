@@ -58,7 +58,6 @@ $$('.harness-tab').forEach(tab => tab.addEventListener('click', () => {
   if (panel) panel.classList.add('active');
   if (tab.dataset.harnessTab === 'templates') renderTemplates();
   if (tab.dataset.harnessTab === 'constraints') loadConstraints();
-  if (tab.dataset.harnessTab === 'pro') loadProStatus();
 }));
 
 /* ---------- Hermes tabs ---------- */
@@ -900,16 +899,7 @@ const PRODUCTION_TEMPLATES = [
   { key: 'migrate', mode: 'loop', icon: '🔁', titleRu: 'Миграция до зелёного', titleEn: 'Migration until green', textRu: 'Мигрируй проект на новую версию фреймворка, файл за файлом, прогоняя сборку после каждого шага — до зелёного.', textEn: 'Migrate the project to the new framework version, file by file, building after each step until green.', bp: 'npm run build' }
 ];
 
-let _proStatusCache = null;
-
 async function loadHarness() {
-  // Pro-бейдж в шапке
-  const pro = _proStatusCache || (_proStatusCache = await window.aura.pro.status());
-  const badge = $('#pro-badge');
-  if (badge) {
-    badge.className = 'pro-badge ' + (pro.installed && pro.features.length ? 'on' : 'off');
-    badge.textContent = (pro.installed && pro.features.length) ? '★ Pro' : 'Free';
-  }
   applyI18n();
 }
 
@@ -919,11 +909,10 @@ $('#btn-harness-plan').addEventListener('click', async () => {
   if (!input) return;
   const plan = await window.aura.harness.plan(input);
   const box = $('#harness-plan-box');
-  const proTag = plan.proAdvanced ? '<span class="pro-tag">Pro</span>' : '';
   box.innerHTML = `
-    <div class="plan-row"><b>${esc(t('harness_tab_dynamic'))}:</b> <span class="pattern-chip">⟳ ${esc(plan.pattern)}</span> ${proTag}</div>
+    <div class="plan-row"><b>${esc(t('harness_tab_dynamic'))}:</b> <span class="pattern-chip">⟳ ${esc(plan.pattern)}</span></div>
     <div class="plan-reason">${esc(plan.reason)}</div>
-    <div class="plan-meta">complexity: ${esc(plan.complexity)} · паттернов доступно: ${plan.availablePatterns.length}${plan.proInstalled ? '' : ' · <i>Pro даёт 6 паттернов</i>'}</div>`;
+    <div class="plan-meta">complexity: ${esc(plan.complexity)} · паттернов доступно: ${plan.availablePatterns.length}</div>`;
 });
 
 $('#btn-harness-run').addEventListener('click', async () => {
@@ -940,7 +929,7 @@ $('#btn-loop-estimate').addEventListener('click', async () => {
   const input = $('#loop-input').value.trim() || 'задача';
   const opts = { maxIterations: parseInt($('#loop-iter').value, 10) || 10 };
   const est = await window.aura.loop.estimate(input, opts);
-  $('#loop-cost-note').textContent = `≈ $${est.usd} / ${est.iterations} итер.${est.pro ? ' (' + (est.model || '') + ')' : ' · ' + (est.note || '')}`;
+  $('#loop-cost-note').textContent = `≈ $${est.usd} / ${est.iterations} итер.${est.model ? ' (' + est.model + ')' : (est.note ? ' · ' + est.note : '')}`;
 });
 
 $('#btn-loop-run').addEventListener('click', async () => {
@@ -1016,19 +1005,6 @@ $('#btn-constraint-add').addEventListener('click', async () => {
   loadConstraints();
 });
 $('#btn-constraint-open').addEventListener('click', () => window.aura.constraints.open());
-
-/* pro status */
-async function loadProStatus() {
-  const pro = _proStatusCache = await window.aura.pro.status();
-  const box = $('#pro-status-box');
-  if (pro.installed && pro.features.length) {
-    box.innerHTML = `<div class="pro-head on">★ ${esc(t('pro_installed'))} · v${esc(pro.version)}</div>` +
-      pro.features.map(f => `<div class="pro-feature"><b>${esc(f.name)}</b><div class="hint">${esc(f.desc)}</div></div>`).join('');
-  } else {
-    box.innerHTML = `<div class="pro-head off">${esc(t('pro_absent'))}</div><p class="hint">${esc(t('pro_unlock'))}</p>` +
-      `<code>npm install git+https://github.com/Ursegorus/aura-pro.git</code>`;
-  }
-}
 
 /* ---------- Авто-обновление ---------- */
 function renderUpdate(s) {

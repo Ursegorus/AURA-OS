@@ -408,9 +408,6 @@ ipcMain.handle('constraints:open', () => {
   shell.openPath(p);
 });
 
-// ---------- Pro status ----------
-ipcMain.handle('pro:status', () => orchestrator.proStatus());
-
 ipcMain.handle('settings:get', () => ({
   version: require('./package.json').version,
   vaultPath: store.get('vaultPath', ''),
